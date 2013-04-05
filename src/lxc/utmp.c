@@ -82,8 +82,10 @@ static int utmp_handler(int fd, void *data, struct lxc_epoll_descr *descr)
 
 	struct lxc_utmp *utmp_data = (struct lxc_utmp *)data;
 
-	/* we're monitoring a directory. ie->name is not included in sizeof(struct inotify_event)
-	 * if we don't read it all at once, read gives us EINVAL, so we read and cast to struct ie
+	/*
+	 * we're monitoring a directory. ie->name is not included in
+	 * sizeof(struct inotify_event) if we don't read it all at once,
+	 * read gives us EINVAL, so we read and cast to struct ie
 	 */
 	char buffer[MAXPATHLEN];
 
@@ -100,7 +102,13 @@ static int utmp_handler(int fd, void *data, struct lxc_epoll_descr *descr)
 	ie = (struct inotify_event *)buffer;
 
 	if (ie->len <= 0) {
-		SYSERROR("inotify event with no name");
+
+		if (ie->mask & IN_UNMOUNT) {
+			DEBUG("watched directory removed");
+			goto out;
+		}
+
+		SYSERROR("inotify event with no name (mask %d)", ie->mask);
 		return -1;
 	}
 
@@ -161,10 +169,18 @@ static int utmp_get_runlevel(struct lxc_utmp *utmp_data)
 	struct utmpx *utmpx;
 	char path[MAXPATHLEN];
 	struct lxc_handler *handler = utmp_data->handler;
-	struct lxc_conf *conf = handler->conf;
 
-	if (snprintf(path, MAXPATHLEN, "%s/var/run/utmp", conf->rootfs.path) >
-	    MAXPATHLEN) {
+	if (snprintf(path, MAXPATHLEN, "/proc/%d/root/run/utmp",
+		     handler->pid) > MAXPATHLEN) {
+		ERROR("path is too long");
+		return -1;
+	}
+
+	if (!access(path, F_OK) && !utmpxname(path))
+		goto utmp_ok;
+
+	if (snprintf(path, MAXPATHLEN, "/proc/%d/root/var/run/utmp",
+		     handler->pid) > MAXPATHLEN) {
 		ERROR("path is too long");
 		return -1;
 	}
@@ -173,6 +189,8 @@ static int utmp_get_runlevel(struct lxc_utmp *utmp_data)
 		SYSERROR("failed to 'utmpxname'");
 		return -1;
 	}
+
+utmp_ok:
 
 	setutxent();
 
@@ -211,19 +229,34 @@ static int utmp_get_ntasks(struct lxc_handler *handler)
 int lxc_utmp_mainloop_add(struct lxc_epoll_descr *descr,
 			  struct lxc_handler *handler)
 {
-	struct lxc_conf *conf = handler->conf;
 	char path[MAXPATHLEN];
+	char path2[MAXPATHLEN];
 	int fd, wd;
 	struct lxc_utmp *utmp_data;
+	struct lxc_conf *conf = handler->conf;
 
 	if (!conf->rootfs.path)
 		return 0;
 
-	/* We set up a watch for the /var/run directory. We're only interested in
-	 * utmp at the moment, but want to watch for delete and create events as well.
+	/* We set up a watch for the /var/run directory. We're only interested
+	 * in utmp at the moment, but want to watch for delete and create
+	 * events as well.
 	 */
-	if (snprintf(path, MAXPATHLEN, "%s/var/run", conf->rootfs.path) >
-	    MAXPATHLEN) {
+	if (snprintf(path, MAXPATHLEN, "/proc/%d/root/run",
+		     handler->pid) > MAXPATHLEN) {
+		ERROR("path is too long");
+		return -1;
+	}
+	if (snprintf(path2, MAXPATHLEN, "/proc/%d/root/run/utmp",
+		     handler->pid) > MAXPATHLEN) {
+		ERROR("path is too long");
+		return -1;
+	}
+	if (!access(path2, F_OK))
+		goto run_ok;
+
+	if (snprintf(path, MAXPATHLEN, "/proc/%d/root/var/run",
+		     handler->pid) > MAXPATHLEN) {
 		ERROR("path is too long");
 		return -1;
 	}
@@ -232,6 +265,8 @@ int lxc_utmp_mainloop_add(struct lxc_epoll_descr *descr,
 		WARN("'%s' not found", path);
 		return 0;
 	}
+
+run_ok:
 
 	utmp_data = (struct lxc_utmp *)malloc(sizeof(struct lxc_utmp));
 
@@ -286,13 +321,16 @@ static int utmp_shutdown_handler(int fd, void *data,
 				 struct lxc_epoll_descr *descr)
 {
 	int ntasks;
+	ssize_t nread;
 	struct lxc_utmp *utmp_data = (struct lxc_utmp *)data;
 	struct lxc_handler *handler = utmp_data->handler;
 	struct lxc_conf *conf = handler->conf;
 	uint64_t expirations;
 
 	/* read and clear notifications */
-	read(fd, &expirations, sizeof(expirations));
+	nread = read(fd, &expirations, sizeof(expirations));
+	if (nread < 0)
+		SYSERROR("Failed to read timer notification");
 
 	ntasks = utmp_get_ntasks(handler);
 

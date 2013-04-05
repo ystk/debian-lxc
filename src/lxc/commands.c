@@ -69,8 +69,8 @@ static int receive_answer(int sock, struct lxc_answer *answer)
 	return ret;
 }
 
-extern int lxc_command(const char *name, struct lxc_command *command,
-		       int *stopped)
+static int __lxc_command(const char *name, struct lxc_command *command,
+			 int *stopped, int stay_connected)
 {
 	int sock, ret = -1;
 	char path[sizeof(((struct sockaddr_un *)0)->sun_path)] = { 0 };
@@ -103,9 +103,24 @@ extern int lxc_command(const char *name, struct lxc_command *command,
 
 	ret = receive_answer(sock, &command->answer);
 out:
-	close(sock);
+	if (!stay_connected || ret < 0)
+		close(sock);
+
 	return ret;
 }
+
+extern int lxc_command(const char *name,
+		       struct lxc_command *command, int *stopped)
+{
+	return __lxc_command(name, command, stopped, 0);
+}
+
+extern int lxc_command_connected(const char *name,
+				 struct lxc_command *command, int *stopped)
+{
+	return __lxc_command(name, command, stopped, 1);
+}
+
 
 pid_t get_init_pid(const char *name)
 {
@@ -116,10 +131,8 @@ pid_t get_init_pid(const char *name)
 	int ret, stopped = 0;
 
 	ret = lxc_command(name, &command, &stopped);
-	if (ret < 0 && stopped) {
-		ERROR("'%s' is not running", name);
+	if (ret < 0 && stopped)
 		return -1;
-	}
 
 	if (ret < 0) {
 		ERROR("failed to send command");
@@ -221,6 +234,11 @@ static int incoming_command_handler(int fd, void *data,
 		return -1;
 	}
 
+	if (fcntl(connection, F_SETFD, FD_CLOEXEC)) {
+		SYSERROR("failed to set close-on-exec on incoming connection");
+		goto out_close;
+	}
+
 	if (setsockopt(connection, SOL_SOCKET,
 		       SO_PASSCRED, &opt, sizeof(opt))) {
 		SYSERROR("failed to enable credential on socket");
@@ -253,7 +271,12 @@ extern int lxc_command_mainloop_add(const char *name,
 
 	fd = lxc_af_unix_open(path, SOCK_STREAM, 0);
 	if (fd < 0) {
-		ERROR("failed to create the command service point");
+		ERROR("failed (%d) to create the command service point %s", errno, offset);
+		if (errno == EADDRINUSE) {
+			ERROR("##");
+			ERROR("# The container appears to be already running!");
+			ERROR("##");
+		}
 		return -1;
 	}
 

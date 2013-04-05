@@ -34,36 +34,12 @@
 #include "namespace.h"
 #include "log.h"
 
-#ifndef __NR_setns
-#  if __i386__
-#    define __NR_setns 338
-#  elif __x86_64__
-#    define __NR_setns 300
-#  elif __powerpc__
-#    define __NR_setns 323
-#  elif __s390__
-#    define __NR_setns 332
-#  else
-#    warning "architecture not supported for setns"
-#  endif
-#endif
-
 lxc_log_define(lxc_namespace, lxc);
 
 struct clone_arg {
 	int (*fn)(void *);
 	void *arg;
 };
-
-int setns(int nstype, int fd)
-{
-#ifndef __NR_setns
-	errno = ENOSYS;
-	return -1;
-#else
-	return syscall(__NR_setns, nstype, fd);
-#endif
-}
 
 static int do_clone(void *arg)
 {
@@ -79,46 +55,17 @@ pid_t lxc_clone(int (*fn)(void *), void *arg, int flags)
 	};
 
 	long stack_size = sysconf(_SC_PAGESIZE);
- 	void *stack = alloca(stack_size) + stack_size;
+	void *stack = alloca(stack_size);
 	pid_t ret;
 
 #ifdef __ia64__
 	ret = __clone2(do_clone, stack,
 		       stack_size, flags | SIGCHLD, &clone_arg);
 #else
-	ret = clone(do_clone, stack, flags | SIGCHLD, &clone_arg);
+	ret = clone(do_clone, stack  + stack_size, flags | SIGCHLD, &clone_arg);
 #endif
 	if (ret < 0)
 		ERROR("failed to clone(0x%x): %s", flags, strerror(errno));
 
 	return ret;
-}
-
-int lxc_attach(pid_t pid)
-{
-	char path[MAXPATHLEN];
-	char *ns[] = { "pid", "mnt", "net", "ipc", "uts" };
-	const int size = sizeof(ns) / sizeof(char *);
-	int fd[size];
-	int i;
-
-	for (i = 0; i < size; i++) {
-		sprintf(path, "/proc/%d/ns/%s", pid, ns[i]);
-		fd[i] = open(path, O_RDONLY);
-		if (fd[i] < 0) {
-			SYSERROR("failed to open '%s'", path);
-			return -1;
-		}
-	}
-
-	for (i = 0; i < size; i++) {
-		if (setns(0, fd[i])) {
-			SYSERROR("failed to set namespace '%s'", ns[i]);
-			return -1;
-		}
-
-		close(fd[i]);
-	}
-
-	return 0;
 }

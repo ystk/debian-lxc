@@ -31,11 +31,13 @@
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/utsname.h>
+#include <sys/personality.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <net/if.h>
 
 #include "parse.h"
+#include "confile.h"
 #include "utils.h"
 
 #include <lxc/log.h>
@@ -43,8 +45,10 @@
 
 lxc_log_define(lxc_confile, lxc);
 
+static int config_personality(const char *, char *, struct lxc_conf *);
 static int config_pts(const char *, char *, struct lxc_conf *);
 static int config_tty(const char *, char *, struct lxc_conf *);
+static int config_ttydir(const char *, char *, struct lxc_conf *);
 static int config_cgroup(const char *, char *, struct lxc_conf *);
 static int config_mount(const char *, char *, struct lxc_conf *);
 static int config_rootfs(const char *, char *, struct lxc_conf *);
@@ -61,7 +65,10 @@ static int config_network_hwaddr(const char *, char *, struct lxc_conf *);
 static int config_network_vlan_id(const char *, char *, struct lxc_conf *);
 static int config_network_mtu(const char *, char *, struct lxc_conf *);
 static int config_network_ipv4(const char *, char *, struct lxc_conf *);
+static int config_network_ipv4_gateway(const char *, char *, struct lxc_conf *);
+static int config_network_script(const char *, char *, struct lxc_conf *);
 static int config_network_ipv6(const char *, char *, struct lxc_conf *);
+static int config_network_ipv6_gateway(const char *, char *, struct lxc_conf *);
 static int config_cap_drop(const char *, char *, struct lxc_conf *);
 static int config_console(const char *, char *, struct lxc_conf *);
 
@@ -74,8 +81,10 @@ struct config {
 
 static struct config config[] = {
 
+	{ "lxc.arch",                 config_personality          },
 	{ "lxc.pts",                  config_pts                  },
 	{ "lxc.tty",                  config_tty                  },
+	{ "lxc.devttydir",            config_ttydir               },
 	{ "lxc.cgroup",               config_cgroup               },
 	{ "lxc.mount",                config_mount                },
 	{ "lxc.rootfs.mount",         config_rootfs_mount         },
@@ -88,10 +97,13 @@ static struct config config[] = {
 	{ "lxc.network.name",         config_network_name         },
 	{ "lxc.network.macvlan.mode", config_network_macvlan_mode },
 	{ "lxc.network.veth.pair",    config_network_veth_pair    },
+	{ "lxc.network.script.up",    config_network_script       },
 	{ "lxc.network.hwaddr",       config_network_hwaddr       },
 	{ "lxc.network.mtu",          config_network_mtu          },
 	{ "lxc.network.vlan.id",      config_network_vlan_id      },
+	{ "lxc.network.ipv4.gateway", config_network_ipv4_gateway },
 	{ "lxc.network.ipv4",         config_network_ipv4         },
+	{ "lxc.network.ipv6.gateway", config_network_ipv6_gateway },
 	{ "lxc.network.ipv6",         config_network_ipv6         },
 	{ "lxc.cap.drop",             config_cap_drop             },
 	{ "lxc.console",              config_console              },
@@ -190,7 +202,7 @@ static struct lxc_netdev *network_netdev(const char *key, const char *value,
 
 static int network_ifname(char **valuep, char *value)
 {
-	if (strlen(value) > IFNAMSIZ) {
+	if (strlen(value) >= IFNAMSIZ) {
 		ERROR("invalid interface name: %s", value);
 		return -1;
 	}
@@ -418,12 +430,49 @@ static int config_network_ipv4(const char *key, char *value,
 	 * prefix and address
 	 */
 	if (!bcast) {
-		inetdev->bcast.s_addr =
-			htonl(INADDR_BROADCAST << (32 - inetdev->prefix));
-		inetdev->bcast.s_addr &= inetdev->addr.s_addr;
+		inetdev->bcast.s_addr = inetdev->addr.s_addr;
+		inetdev->bcast.s_addr |=
+			htonl(INADDR_BROADCAST >>  inetdev->prefix);
 	}
 
 	lxc_list_add(&netdev->ipv4, list);
+
+	return 0;
+}
+
+static int config_network_ipv4_gateway(const char *key, char *value,
+			               struct lxc_conf *lxc_conf)
+{
+	struct lxc_netdev *netdev;
+	struct in_addr *gw;
+
+	netdev = network_netdev(key, value, &lxc_conf->network);
+	if (!netdev)
+		return -1;
+
+	gw = malloc(sizeof(*gw));
+	if (!gw) {
+		SYSERROR("failed to allocate ipv4 gateway address");
+		return -1;
+	}
+
+	if (!value) {
+		ERROR("no ipv4 gateway address specified");
+		return -1;
+	}
+
+	if (!strcmp(value, "auto")) {
+		netdev->ipv4_gateway = NULL;
+		netdev->ipv4_gateway_auto = true;
+	} else {
+		if (!inet_pton(AF_INET, value, gw)) {
+			SYSERROR("invalid ipv4 gateway address: %s", value);
+			return -1;
+		}
+
+		netdev->ipv4_gateway = gw;
+		netdev->ipv4_gateway_auto = false;
+	}
 
 	return 0;
 }
@@ -475,6 +524,79 @@ static int config_network_ipv6(const char *key, char *value,
 	return 0;
 }
 
+static int config_network_ipv6_gateway(const char *key, char *value,
+			               struct lxc_conf *lxc_conf)
+{
+	struct lxc_netdev *netdev;
+	struct in6_addr *gw;
+
+	netdev = network_netdev(key, value, &lxc_conf->network);
+	if (!netdev)
+		return -1;
+
+	gw = malloc(sizeof(*gw));
+	if (!gw) {
+		SYSERROR("failed to allocate ipv6 gateway address");
+		return -1;
+	}
+
+	if (!value) {
+		ERROR("no ipv6 gateway address specified");
+		return -1;
+	}
+
+	if (!strcmp(value, "auto")) {
+		netdev->ipv6_gateway = NULL;
+		netdev->ipv6_gateway_auto = true;
+	} else {
+		if (!inet_pton(AF_INET6, value, gw)) {
+			SYSERROR("invalid ipv6 gateway address: %s", value);
+			return -1;
+		}
+
+		netdev->ipv6_gateway = gw;
+		netdev->ipv6_gateway_auto = false;
+	}
+
+	return 0;
+}
+
+static int config_network_script(const char *key, char *value,
+				 struct lxc_conf *lxc_conf)
+{
+	struct lxc_netdev *netdev;
+
+	netdev = network_netdev(key, value, &lxc_conf->network);
+	if (!netdev)
+	return -1;
+
+	char *copy = strdup(value);
+	if (!copy) {
+		SYSERROR("failed to dup string '%s'", value);
+		return -1;
+	}
+	if (strcmp(key, "lxc.network.script.up") == 0) {
+		netdev->upscript = copy;
+		return 0;
+	}
+	SYSERROR("Unknown key: %s", key);
+	free(copy);
+	return -1;
+}
+
+static int config_personality(const char *key, char *value,
+			      struct lxc_conf *lxc_conf)
+{
+	signed long personality = lxc_config_parse_arch(value);
+
+	if (personality >= 0)
+		lxc_conf->personality = personality;
+	else
+		WARN("unsupported personality '%s'", value);
+
+	return 0;
+}
+
 static int config_pts(const char *key, char *value, struct lxc_conf *lxc_conf)
 {
 	int maxpts = atoi(value);
@@ -493,12 +615,30 @@ static int config_tty(const char *key, char *value, struct lxc_conf *lxc_conf)
 	return 0;
 }
 
+static int config_ttydir(const char *key, char *value,
+			  struct lxc_conf *lxc_conf)
+{
+	char *path;
+
+	if (!value || strlen(value) == 0)
+		return 0;
+	path = strdup(value);
+	if (!path) {
+		SYSERROR("failed to strdup '%s': %m", value);
+		return -1;
+	}
+
+	lxc_conf->ttydir = path;
+
+	return 0;
+}
+
 static int config_cgroup(const char *key, char *value, struct lxc_conf *lxc_conf)
 {
 	char *token = "lxc.cgroup.";
 	char *subkey;
-	struct lxc_list *cglist;
-	struct lxc_cgroup *cgelem;
+	struct lxc_list *cglist = NULL;
+	struct lxc_cgroup *cgelem = NULL;
 
 	subkey = strstr(key, token);
 
@@ -515,21 +655,40 @@ static int config_cgroup(const char *key, char *value, struct lxc_conf *lxc_conf
 
 	cglist = malloc(sizeof(*cglist));
 	if (!cglist)
-		return -1;
+		goto out;
 
 	cgelem = malloc(sizeof(*cgelem));
-	if (!cgelem) {
-		free(cglist);
-		return -1;
-	}
+	if (!cgelem)
+		goto out;
+	memset(cgelem, 0, sizeof(*cgelem));
 
 	cgelem->subsystem = strdup(subkey);
 	cgelem->value = strdup(value);
+
+	if (!cgelem->subsystem || !cgelem->value)
+		goto out;
+
 	cglist->elem = cgelem;
 
 	lxc_list_add_tail(&lxc_conf->cgroup, cglist);
 
 	return 0;
+
+out:
+	if (cglist)
+		free(cglist);
+
+	if (cgelem) {
+		if (cgelem->subsystem)
+			free(cgelem->subsystem);
+
+		if (cgelem->value)
+			free(cgelem->value);
+
+		free(cgelem);
+	}
+
+	return -1;
 }
 
 static int config_fstab(const char *key, char *value, struct lxc_conf *lxc_conf)
@@ -575,6 +734,8 @@ static int config_mount(const char *key, char *value, struct lxc_conf *lxc_conf)
 		return -1;
 
 	mntelem = strdup(value);
+	if (!mntelem)
+		return -1;
 	mntlist->elem = mntelem;
 
 	lxc_list_add_tail(&lxc_conf->mount_list, mntlist);
@@ -722,7 +883,7 @@ static int parse_line(char *buffer, void *data)
 	char *dot;
 	char *key;
 	char *value;
-	int ret = -1;
+	int ret = 0;
 
 	if (lxc_is_line_empty(buffer))
 		return 0;
@@ -738,10 +899,14 @@ static int parse_line(char *buffer, void *data)
 	}
 
 	line += lxc_char_left_gc(line, strlen(line));
-	if (line[0] == '#') {
-		ret = 0;
+
+	/* martian option - ignoring it, the commented lines beginning by '#'
+	 * fall in this case
+	 */
+	if (strncmp(line, "lxc.", 4))
 		goto out;
-	}
+
+	ret = -1;
 
 	dot = strstr(line, "=");
 	if (!dot) {
@@ -811,4 +976,27 @@ int lxc_config_define_load(struct lxc_list *defines, struct lxc_conf *conf)
 	}
 
 	return ret;
+}
+
+signed long lxc_config_parse_arch(const char *arch)
+{
+	struct per_name {
+		char *name;
+		unsigned long per;
+	} pername[4] = {
+		{ "x86", PER_LINUX32 },
+		{ "i686", PER_LINUX32 },
+		{ "x86_64", PER_LINUX },
+		{ "amd64", PER_LINUX },
+	};
+	size_t len = sizeof(pername) / sizeof(pername[0]);
+
+	int i;
+
+	for (i = 0; i < len; i++) {
+		if (!strcmp(pername[i].name, arch))
+		    return pername[i].per;
+	}
+
+	return -1;
 }

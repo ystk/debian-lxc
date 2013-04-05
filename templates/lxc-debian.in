@@ -20,10 +20,21 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
+SUITE=${SUITE:-squeeze}
+MIRROR=${MIRROR:-http://cdn.debian.net/debian}
+
 configure_debian()
 {
     rootfs=$1
     hostname=$2
+
+    # squeeze only has /dev/tty and /dev/tty0 by default,
+    # therefore creating missing device nodes for tty1-4.
+    for tty in $(seq 1 4); do
+	if [ ! -e $rootfs/dev/tty$tty ]; then
+	    mknod $rootfs/dev/tty$tty c 4 $tty
+	fi
+    done
 
     # configure the inittab
     cat <<EOF > $rootfs/etc/inittab
@@ -65,14 +76,15 @@ EOF
 
     # reconfigure some services
     if [ -z "$LANG" ]; then
-	chroot $rootfs locale-gen en_US.UTF-8
+	chroot $rootfs locale-gen en_US.UTF-8 UTF-8
 	chroot $rootfs update-locale LANG=en_US.UTF-8
     else
-	chroot $rootfs locale-gen $LANG
+	chroot $rootfs locale-gen $LANG $(echo $LANG | cut -d. -f2)
 	chroot $rootfs update-locale LANG=$LANG
     fi
 
     # remove pointless services in a container
+    chroot $rootfs /usr/sbin/update-rc.d -f checkroot.sh remove
     chroot $rootfs /usr/sbin/update-rc.d -f umountfs remove
     chroot $rootfs /usr/sbin/update-rc.d -f hwclock.sh remove
     chroot $rootfs /usr/sbin/update-rc.d -f hwclockfirst.sh remove
@@ -90,7 +102,7 @@ ifupdown,\
 locales,\
 libui-dialog-perl,\
 dialog,\
-dhcp-client,\
+dhcp3-client,\
 netbase,\
 net-tools,\
 iproute,\
@@ -100,23 +112,23 @@ openssh-server
     arch=$2
 
     # check the mini debian was not already downloaded
-    mkdir -p "$cache/partial-$arch"
+    mkdir -p "$cache/partial-$SUITE-$arch"
     if [ $? -ne 0 ]; then
-	echo "Failed to create '$cache/partial-$arch' directory"
+	echo "Failed to create '$cache/partial-$SUITE-$arch' directory"
 	return 1
     fi
 
     # download a mini debian into a cache
     echo "Downloading debian minimal ..."
     debootstrap --verbose --variant=minbase --arch=$arch \
-	--include $packages \
-	lenny $cache/partial-$arch http://ftp.debian.org/debian
+	--include=$packages \
+	"$SUITE" "$cache/partial-$SUITE-$arch" $MIRROR
     if [ $? -ne 0 ]; then
 	echo "Failed to download the rootfs, aborting."
 	return 1
     fi
 
-    mv "$1/partial-$arch" "$1/rootfs-$arch"
+    mv "$1/partial-$SUITE-$arch" "$1/rootfs-$SUITE-$arch"
     echo "Download complete."
 
     return 0
@@ -130,7 +142,8 @@ copy_debian()
 
     # make a local copy of the minidebian
     echo -n "Copying rootfs to $rootfs..."
-    cp -a $cache/rootfs-$arch $rootfs || return 1
+    mkdir -p $rootfs
+    rsync -a "$cache/rootfs-$SUITE-$arch"/ $rootfs/ || return 1
     return 0
 }
 
@@ -146,17 +159,10 @@ install_debian()
 	    return 1
 	fi
 
-	arch=$(arch)
-	if [ "$arch" == "x86_64" ]; then
-	    arch=amd64
-	fi
+	arch=$(dpkg --print-architecture)
 
-	if [ "$arch" == "i686" ]; then
-	    arch=i386
-	fi
-
-	echo "Checking cache download in $cache/rootfs-$arch ... "
-	if [ ! -e "$cache/rootfs-$arch" ]; then
+	echo "Checking cache download in $cache/rootfs-$SUITE-$arch ... "
+	if [ ! -e "$cache/rootfs-$SUITE-$arch" ]; then
 	    download_debian $cache $arch
 	    if [ $? -ne 0 ]; then
 		echo "Failed to download 'debian base'"
@@ -181,12 +187,13 @@ copy_configuration()
 {
     path=$1
     rootfs=$2
-    name=$3
+    hostname=$3
 
     cat <<EOF >> $path/config
 lxc.tty = 4
 lxc.pts = 1024
 lxc.rootfs = $rootfs
+lxc.utsname = $hostname
 lxc.cgroup.devices.deny = a
 # /dev/null and zero
 lxc.cgroup.devices.allow = c 1:3 rwm
@@ -206,7 +213,6 @@ lxc.cgroup.devices.allow = c 254:0 rwm
 
 # mounts point
 lxc.mount.entry=proc $rootfs/proc proc nodev,noexec,nosuid 0 0
-lxc.mount.entry=devpts $rootfs/dev/pts devpts defaults 0 0
 lxc.mount.entry=sysfs $rootfs/sys sysfs defaults  0 0
 EOF
 
@@ -303,7 +309,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-copy_configuration $path $rootfs
+copy_configuration $path $rootfs $name
 if [ $? -ne 0 ]; then
     echo "failed write configuration file"
     exit 1

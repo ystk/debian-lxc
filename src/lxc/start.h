@@ -40,7 +40,6 @@ struct lxc_handler {
 	char *name;
 	lxc_state_t state;
 	int sigfd;
-	char nsgroup[MAXPATHLEN];
 	sigset_t oldmask;
 	struct lxc_conf *conf;
 	struct lxc_operations *ops;
@@ -55,7 +54,7 @@ extern int lxc_poll(const char *name, struct lxc_handler *handler);
 extern void lxc_abort(const char *name, struct lxc_handler *handler);
 extern void lxc_fini(const char *name, struct lxc_handler *handler);
 extern int lxc_set_state(const char *, struct lxc_handler *, lxc_state_t);
-extern int lxc_check_inherited(int fd_to_ignore);
+extern int lxc_check_inherited(struct lxc_conf *conf, int fd_to_ignore);
 int __lxc_start(const char *, struct lxc_conf *, struct lxc_operations *,
 		void *);
 

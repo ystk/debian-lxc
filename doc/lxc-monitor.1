@@ -3,7 +3,7 @@
 .\" <http://shell.ipoline.com/~elmert/comp/docbook2X/> 
 .\" Please send any bug reports, improvements, comments, patches, 
 .\" etc. to Steve Cheng <steve@ggi-project.org>.
-.TH "LXC-MONITOR" "1" "26 July 2010" "" ""
+.TH "LXC-MONITOR" "1" "02 March 2012" "" ""
 
 .SH NAME
 lxc-monitor \- monitor the container state
@@ -51,6 +51,12 @@ ERROR events log on stderr.
 \fB-n, --name=\fINAME\fB\fR
 Use container identifier \fINAME\fR\&.
 The container identifier format is an alphanumeric string.
+.SH "BUGS"
+.PP
+Only one \fBlxc-monitor\fR can run at a time. Other
+invocations will fail with the following error:
+.PP
+lxc-monitor: bind : Address already in use
 .SH "EXAMPLES"
 .TP
 \fBlxc-monitor -n foo\fR
@@ -91,6 +97,7 @@ the \fBlxc-create\fR command.
 \fBlxc-info\fR(1),
 \fBlxc-freeze\fR(1),
 \fBlxc-unfreeze\fR(1),
+\fBlxc-attach\fR(1),
 \fBlxc.conf\fR(5)
 .SH "AUTHOR"
 .PP
