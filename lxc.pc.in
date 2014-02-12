@@ -1,7 +1,8 @@
 bindir=@BINDIR@
 libdir=@LIBDIR@
-localstatedir=@LXCPATH@
+localstatedir=@LOCALSTATEDIR@
 includedir=@INCLUDEDIR@
+rootfsmountdir=@LXCROOTFSMOUNT@
 
 Name: lxc
 Description: linux container tools

@@ -96,6 +96,9 @@ static void print_usage(const struct option longopts[],
 		int j;
 		char *uppername = strdup(opt->name);
 
+		if (!uppername)
+			exit(-ENOMEM);
+
 		for (j = 0; uppername[j]; j++)
 			uppername[j] = toupper(uppername[j]);
 
@@ -168,6 +171,7 @@ extern int lxc_arguments_parse(struct lxc_arguments *args,
 		case 'n': 	args->name = optarg; break;
 		case 'o':	args->log_file = optarg; break;
 		case 'l':	args->log_priority = optarg; break;
+		case 'c':	args->console = optarg; break;
 		case 'q':	args->quiet = 1; break;
 		case OPT_USAGE: print_usage(args->options, args);
 		case '?':	print_help(args, 1);
@@ -200,35 +204,6 @@ error:
 	if (ret)
 		lxc_error(args, "could not parse command line");
 	return ret;
-}
-
-extern char **lxc_arguments_dup(const char *file, struct lxc_arguments *args)
-{
-	char **argv;
-	int opt, nbargs = args->argc + 2;
-
-	if (args->quiet)
-		nbargs += 1;
-
-	argv = malloc((nbargs + 1) * sizeof(*argv));
-	if (!argv)
-		return NULL;
-
-	nbargs = 0;
-
-	argv[nbargs++] = strdup(file);
-
-	if (args->quiet)
-		argv[nbargs++] = "--quiet";
-
-	argv[nbargs++] = "--";
-
-	for (opt = 0; opt < args->argc; opt++)
-		argv[nbargs++] = strdup(args->argv[opt]);
-
-	argv[nbargs] = NULL;
-
-	return argv;
 }
 
 int lxc_arguments_str_to_int(struct lxc_arguments *args, const char *str)

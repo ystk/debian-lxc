@@ -3,7 +3,7 @@
 .\" <http://shell.ipoline.com/~elmert/comp/docbook2X/> 
 .\" Please send any bug reports, improvements, comments, patches, 
 .\" etc. to Steve Cheng <steve@ggi-project.org>.
-.TH "LXC-EXECUTE" "1" "26 July 2010" "" ""
+.TH "LXC-EXECUTE" "1" "02 March 2012" "" ""
 
 .SH NAME
 lxc-execute \- run an application inside a container.
@@ -12,6 +12,7 @@ lxc-execute \- run an application inside a container.
 \fBlxc-execute \fI-n name\fB
 [-f config_file] [-s KEY=VAL
 ]
+[--]
 \fIcommand\fB\fR
 
 .SH "DESCRIPTION"
@@ -57,6 +58,15 @@ container (via lxc-create).
 Assign value \fIVAL\fR to configuration
 variable \fIKEY\fR\&. This overrides any
 assignment done in \fIconfig_file\fR\&.
+.TP
+\fB--\fR
+Signal the end of options and disables further option
+processing. Any arguments after the -- are treated as
+arguments.
+
+This option is useful when you want to execute, with the
+command \fBlxc-execute\fR, a command line
+with its own options.
 .SH "COMMON OPTIONS"
 .PP
 These options are common to most of lxc commands.
@@ -114,6 +124,7 @@ container or create a new one.
 \fBlxc-info\fR(1),
 \fBlxc-freeze\fR(1),
 \fBlxc-unfreeze\fR(1),
+\fBlxc-attach\fR(1),
 \fBlxc.conf\fR(5)
 .SH "AUTHOR"
 .PP

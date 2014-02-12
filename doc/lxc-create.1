@@ -3,7 +3,7 @@
 .\" <http://shell.ipoline.com/~elmert/comp/docbook2X/> 
 .\" Please send any bug reports, improvements, comments, patches, 
 .\" etc. to Steve Cheng <steve@ggi-project.org>.
-.TH "LXC-CREATE" "1" "26 July 2010" "" ""
+.TH "LXC-CREATE" "1" "02 March 2012" "" ""
 
 .SH NAME
 lxc-create \- creates a container
@@ -21,7 +21,7 @@ user information. The identifier \fIname\fR
 is used to specify the container to be used with the different
 lxc commands.
 .PP
-The object is a directory created in \fI/var/lib/lxc\fR
+The object is a directory created in \fI${localstatedir}/lib/lxc\fR
 and identified by its name.
 .PP
 The object is the definition of the different resources an
@@ -42,7 +42,7 @@ and isolation functionalities for the container.
 \&'template' is the short name of an existing 'lxc-template'
 script that is called by lxc-create,
 eg. busybox, debian, fedora, ubuntu or sshd.
-Refer to the examples in \fI/usr/lib64/lxc/templates\fR
+Refer to the examples in \fI${libdir}/lxc/templates\fR
 for details of the expected script structure.
 .SH "DIAGNOSTIC"
 .TP
@@ -69,6 +69,7 @@ available containers on the system.
 \fBlxc-info\fR(1),
 \fBlxc-freeze\fR(1),
 \fBlxc-unfreeze\fR(1),
+\fBlxc-attach\fR(1),
 \fBlxc.conf\fR(5)
 .SH "AUTHOR"
 .PP

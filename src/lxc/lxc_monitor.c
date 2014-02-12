@@ -69,6 +69,10 @@ int main(int argc, char *argv[])
 		return -1;
 
 	regexp = malloc(strlen(my_args.name) + 3);
+	if (!regexp) {
+		ERROR("failed to allocate memory");
+		return -1;
+	}
 	sprintf(regexp, "^%s$", my_args.name);
 
 	if (regcomp(&preg, regexp, REG_NOSUB|REG_EXTENDED)) {
@@ -79,6 +83,8 @@ int main(int argc, char *argv[])
 	fd = lxc_monitor_open();
 	if (fd < 0)
 		return -1;
+
+	setlinebuf(stdout);
 
 	for (;;) {
 		if (lxc_monitor_read(fd, &msg) < 0)

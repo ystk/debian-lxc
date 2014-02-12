@@ -37,7 +37,7 @@ our %LXC_NAMES;       # Specified container names (if any)
 
 sub get_container_names {
 	my $ref_names = shift;
-	my $lxcpath='@LXCPATH@';
+	my $lxcpath = '@LXCPATH@';
 
 	open(active, "netstat -xa | grep $lxcpath |") or return;
 	while(<active>) {
@@ -53,25 +53,32 @@ sub get_cgroup {
 	my $mount_string;
 
 	$mount_string=`mount -t cgroup |grep -E -e '^lxc '`;
-	unless ($mount_string) {
-		$mount_string=`mount |grep -m1 'type cgroup'`;
-	}
-	chomp($mount_string);
 	if ($mount_string) {
+                # use the one 'lxc' cgroup mount if it exists
+		chomp($mount_string);
 		$$ref_cgroup=`echo "$mount_string" |cut -d' ' -f3`;
 		chomp($$ref_cgroup);
 	}
-	die "unable to find mounted cgroup" unless $$ref_cgroup;
+	# Otherwise (i.e. cgroup-bin) use the first cgroup mount
+	$mount_string=`grep -m1 -E '^[^ \t]+[ \t]+[^ \t]+[ \t]+cgroup' /proc/self/mounts`;
+	unless ($mount_string) {
+		die "unable to find mounted cgroup" unless $$ref_cgroup;
+	}
+	chomp($mount_string);
+	$$ref_cgroup=`echo "$mount_string" |cut -d' ' -f2`;
+	chomp($$ref_cgroup);
+	return;
 }
 
 sub get_pids_in_containers {
 	my $ref_names = shift;
 	my $ref_cgroup = shift;
 	my $ref_pids = shift;
+	my $init_cgroup = shift;
 	my @pidlist;
 
 	for (@{$ref_names}) {
-		my $task_file = "$$ref_cgroup/$_/tasks";
+		my $task_file = "$$ref_cgroup/$init_cgroup/lxc/$_/tasks";
 
 		$LXC_NAMES{$_} = 1;
 		open(tasks, "cat $task_file 2>/dev/null |") or next;
@@ -108,17 +115,35 @@ sub execute_ps {
     close ps;
 }
 
+sub get_init_cgroup {
+    my $filename = "/proc/1/cgroup";
+    open(LXC, "$filename");
+    my @cgroup = <LXC>;
+    close LXC;
+    my $container = '';
+    foreach ( @cgroup ) {
+        chomp;
+        # find the container name after :/
+        s/.*:\///o;
+    }
+    return $container;
+}
+
 sub get_container {
     my $pid = shift;
     my $filename = "/proc/$pid/cgroup";
     open(LXC, "$filename");
-    my $container = <LXC>;
+    # read all lines at once
+    my @cgroup = <LXC>;
     close LXC;
-    chomp($container);
-    if ($container =~ m/[:,]ns[:,]/o) {
-    	$container =~ s/.*:\///o;
-    } else {
-	$container ='';
+    my $container = '';
+    foreach ( @cgroup ) {
+        chomp;
+        # find the container name after :/
+        s/.*:\///o;
+        # chop off everything up to 'lxc/'
+        s/lxc\///o;
+        $container = $_;
     }
     return $container;
 }
@@ -129,7 +154,7 @@ sub display_headers {
 
 sub display_usage {
     print <<EOF;
-Usage: lxc-ps [--help] [--usage] [--name NAME...] [--lxc] [ps options]
+Usage: lxc-ps [--help] [--usage] [-n|--name NAME...] [--lxc] [-- ps options]
 EOF
 }
 
@@ -152,12 +177,13 @@ or try a 'ps --help' for further details.
 EOF
 }
 
-use Getopt::Long qw(:config no_auto_abbrev pass_through);
+use Getopt::Long qw(:config pass_through);
 
 my $arg_help  = '';
 my $arg_usage = '';
 my $arg_lxc   = '';
 my @arg_name;
+my $init_cgroup = '/';
 
 GetOptions('help'   => \$arg_help,
 	   'usage'  => \$arg_usage,
@@ -170,6 +196,10 @@ GetOptions('help'   => \$arg_help,
 if ($arg_help)  {display_help; exit 0;}
 if ($arg_usage) {display_usage; exit 0;}
 
+if ($ARGV[0] == '--') {
+	shift @ARGV;
+}
+
 # Should we filter processes related to containers
 if ($arg_lxc) {
 	$LXC_DISPLAY = 1;
@@ -180,8 +210,9 @@ if (@arg_name > 0) {
 	my $pid_list;
 	$LXC_DISPLAY = 2;
 
+	$init_cgroup = get_init_cgroup();
 	get_cgroup \$cgroup;
-	get_pids_in_containers(\@arg_name, \$cgroup, \$pid_list);
+	get_pids_in_containers(\@arg_name, \$cgroup, \$pid_list, $init_cgroup);
 	if ($pid_list) {
 		@ARGV = ("-p $pid_list",@ARGV);
 	}

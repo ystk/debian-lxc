@@ -1,14 +1,80 @@
 #!/usr/bin/make -f
 
-include /usr/share/cdbs/1/rules/debhelper.mk
-include /usr/share/cdbs/1/class/autotools.mk
-# We don't have patches, for now...
-#include /usr/share/cdbs/1/rules/dpatch.mk
+SHELL := sh -e
 
-# Install liblxc in out private area, for now, until it's stable.
-LIBDIR="\$${prefix}/lib/lxc"
-DEB_CONFIGURE_EXTRA_FLAGS=--libdir=$(LIBDIR) \
-			  --with-rootfs-path=$(LIBDIR)
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
-binary-install/lxc::
-	cp debian/lxc.overrides debian/lxc/usr/share/lintian/overrides/lxc
+%:
+	dh ${@} --with autotools_dev
+
+override_dh_auto_configure:
+	dh_auto_configure -- --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc --libexecdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) --with-rootfs-path=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc --enable-doc
+
+override_dh_auto_install:
+	dh_auto_install
+
+	# creating lxc directories
+	mkdir -p debian/tmp/etc/lxc/auto
+	mkdir -p debian/tmp/etc/lxc/debconf
+	mkdir -p debian/tmp/usr/share/lxc/cache
+	mkdir -p debian/tmp/usr/share/lxc/packages
+	mkdir -p debian/tmp/var/log/lxc
+
+	# debian local additions
+	mkdir -p debian/lxc/usr/bin
+	cp debian/local/lxc debian/lxc/usr/bin
+	cp debian/local/lxc-backup debian/lxc/usr/bin
+	cp debian/local/lxc-halt debian/lxc/usr/bin
+	cp debian/local/lxc-list debian/lxc/usr/bin
+	cp debian/local/lxc-ls debian/lxc/usr/bin
+	cp debian/local/lxc-restore debian/lxc/usr/bin
+
+	mkdir -p debian/lxc/etc/bash_completion.d
+	cp debian/local/lxc.sh debian/lxc/etc/bash_completion.d
+
+	mkdir -p debian/lxc/usr/share/lxc/templates
+	cp -r debian/local/lxc-debconf* debian/lxc/usr/share/lxc/templates
+
+	# replacing upstreams debian template
+	rm -f debian/tmp/usr/share/lxc/templates/lxc-debian
+	ln -s lxc-debconf debian/tmp/usr/share/lxc/templates/lxc-debian
+	ln -s lxc-debconf.d debian/tmp/usr/share/lxc/templates/lxc-debian.d
+
+	# adding progress template symlink
+	ln -s lxc-debconf debian/tmp/usr/share/lxc/templates/lxc-progress
+	ln -s lxc-debconf.d debian/tmp/usr/share/lxc/templates/lxc-progress.d
+
+	# removing currently unsupported lxc-ubuntu until lxc-debconf also supports ubuntu
+	rm -f debian/tmp/usr/share/lxc/templates/lxc-ubuntu
+
+	# removing useless files
+	rm -f debian/tmp/usr/bin/lxc-ls
+	rm -f debian/tmp/usr/share/lxc/templates/lxc-busybox
+	rm -f debian/tmp/usr/share/lxc/templates/lxc-lenny
+
+override_dh_builddeb:
+	dh_builddeb -- -Zxz -z9
+
+override_dh_compress:
+	dh_compress -X.cfg
+
+override_dh_fixperms:
+	dh_fixperms
+
+	chmod 0700 debian/lxc/var/log/lxc
+
+override_dh_gencontrol:
+ifeq ($(DEB_HOST_MULTIARCH),)
+	dh_gencontrol
+else
+	dh_gencontrol -- -Vmultiarch:Pre-Depends="multiarch-support"
+endif
+
+override_dh_install:
+	dh_install --fail-missing
+
+override_dh_installinit:
+	dh_installinit --no-restart-on-upgrade
+
+override_dh_strip:
+	dh_strip --dbg-package=lxc-dbg

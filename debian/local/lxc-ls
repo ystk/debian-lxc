@@ -1,0 +1,27 @@
+#!/bin/sh
+
+## Copyright (C) 2006-2012 Daniel Baumann <daniel.baumann@progress-technologies.net>
+##
+## This program comes with ABSOLUTELY NO WARRANTY; for details see COPYING.
+## This is free software, and you are welcome to redistribute it
+## under certain conditions; see COPYING for details.
+
+
+set -e
+
+_LXC_DIRECTORY="/var/lib/lxc"
+
+if [ ! -e "${_LXC_DIRECTORY}" ]
+then
+	echo "E: ${_LXC_DIRECTORY}: no such directory." >&2
+	exit 1
+fi
+
+cd "${_LXC_DIRECTORY}"
+
+_DIRECTORIES="$(find . -maxdepth 1 -type d -and -not -name ".*" -and -not -name lost+found | sort)"
+
+for _DIRECTORY in ${_DIRECTORIES}
+do
+	ls -d ${@} $(basename ${_DIRECTORY})
+done

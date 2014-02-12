@@ -1,0 +1,123 @@
+Template: lxc-debconf/title
+Type: title
+Description: Linux Container (LXC)
+
+Template: lxc-debconf/distribution
+Type: select
+Default:
+Choices-C: ${CHOICES_C}
+Choices: ${CHOICES}
+Description: Distribution
+ Distribution.
+
+Template: lxc-debconf/parent-distribution
+Type: select
+Default:
+Choices-C: ${CHOICES_C}
+Choices: ${CHOICES}
+Description: for internal use; can be preseeded
+ Parent Distribution.
+
+Template: lxc-debconf/architecture
+Type: select
+Default:
+Choices-C: ${CHOICES_C}
+Choices: ${CHOICES}
+Description: Architecture
+ Architecture.
+
+Template: lxc-debconf/archives
+Type: multiselect
+Default:
+Choices-C: ${CHOICES_C}
+Choices: ${CHOICES}
+Description: Archives
+ Archives.
+
+Template: lxc-debconf/parent-archives
+Type: multiselect
+Default:
+Choices-C: ${CHOICES_C}
+Choices: ${CHOICES}
+Description: Parent Archives
+ Parent Archives.
+
+Template: lxc-debconf/mirror
+Type: string
+Default:
+Description: Mirror
+ Mirror.
+
+Template: lxc-debconf/mirror-security
+Type: string
+Default:
+Description: Mirror Security
+ Mirror Security.
+
+Template: lxc-debconf/mirror-backports
+Type: string
+Default:
+Description: Mirror Backports
+ Mirror Backports.
+
+Template: lxc-debconf/parent-mirror
+Type: string
+Default:
+Description: Parent Mirror
+ Parent Mirror.
+
+Template: lxc-debconf/parent-mirror-security
+Type: string
+Default:
+Description: Parent Mirror Security
+ Parent Mirror Security.
+
+Template: lxc-debconf/parent-mirror-backports
+Type: string
+Default:
+Description: Parent Mirror Backports
+ Parent Mirror Backports.
+
+Template: lxc-debconf/archive-areas
+Type: multiselect
+Default:
+Choices: ${CHOICES}
+Description: Archive Areas
+ Archive Areas.
+
+Template: lxc-debconf/parent-archive-areas
+Type: multiselect
+Default:
+Choices: ${CHOICES}
+Description: Parent Archive Areas
+ Parent Archive Areas.
+
+Template: lxc-debconf/packages
+Type: string
+Default:
+Description: Packages
+ Packages.
+
+Template: passwd/root-password
+Type: string
+Default:
+Description: Root password
+ Root password.
+
+Template: lxc-debconf/eth0/bridge
+Type: string
+Default:
+Description: Bridge
+ Bridge.
+
+Template: lxc-debconf/eth0/mac
+Type: string
+Default:
+Description: MAC
+ MAC.
+
+Template: lxc-debconf/auto
+Type: boolean
+Default: false
+Description: Auto start container?
+ Should the container be automatically configured to be started on boot?

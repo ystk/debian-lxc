@@ -3,7 +3,7 @@
 .\" <http://shell.ipoline.com/~elmert/comp/docbook2X/> 
 .\" Please send any bug reports, improvements, comments, patches, 
 .\" etc. to Steve Cheng <steve@ggi-project.org>.
-.TH "LXC-PS" "1" "26 July 2010" "" ""
+.TH "LXC-PS" "1" "02 March 2012" "" ""
 
 .SH NAME
 lxc-ps \- list the processes belonging to a specific container.
@@ -40,11 +40,12 @@ limit the output to the processes belonging
 to all lxc containers.
 .TP
 \fB   [ps options] \fR
-The option passed to \fBlxc-ps\fR are the
-same as the \fBps\fR command.
+The \fBps\fR options must be separated
+from \fBlxc-ps\fR options by
+the \fB--\fR parameter.
 .SH "EXAMPLE"
 .TP
-\fBlxc-ps --name foo --forest\fR
+\fBlxc-ps --name foo -- --forest\fR
 list all the processes belonging to container 'foo' and show
 dependencies.
 .SH "SEE ALSO"
@@ -68,6 +69,7 @@ dependencies.
 \fBlxc-info\fR(1),
 \fBlxc-freeze\fR(1),
 \fBlxc-unfreeze\fR(1),
+\fBlxc-attach\fR(1),
 \fBlxc.conf\fR(5)
 .SH "AUTHOR"
 .PP

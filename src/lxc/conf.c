@@ -24,12 +24,16 @@
 #include <stdio.h>
 #undef _GNU_SOURCE
 #include <stdlib.h>
+#include <stdarg.h>
 #include <errno.h>
 #include <string.h>
 #include <dirent.h>
 #include <mntent.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #include <pty.h>
+
+#include <linux/loop.h>
 
 #include <sys/types.h>
 #include <sys/utsname.h>
@@ -40,6 +44,7 @@
 #include <sys/mman.h>
 #include <sys/prctl.h>
 #include <sys/capability.h>
+#include <sys/personality.h>
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -55,6 +60,7 @@
 #include "conf.h"
 #include "log.h"
 #include "lxc.h"	/* for lxc_cgroup_set() */
+#include "caps.h"       /* for lxc_caps_last_cap() */
 
 lxc_log_define(lxc_conf, lxc);
 
@@ -63,12 +69,24 @@ lxc_log_define(lxc_conf, lxc);
 #define MAXMTULEN   16
 #define MAXLINELEN  128
 
+#ifndef MS_DIRSYNC
+#define MS_DIRSYNC  128
+#endif
+
 #ifndef MS_REC
 #define MS_REC 16384
 #endif
 
 #ifndef MNT_DETACH
 #define MNT_DETACH 2
+#endif
+
+#ifndef MS_RELATIME
+#define MS_RELATIME (1 << 21)
+#endif
+
+#ifndef MS_STRICTATIME
+#define MS_STRICTATIME (1 << 24)
 #endif
 
 #ifndef CAP_SETFCAP
@@ -89,7 +107,7 @@ lxc_log_define(lxc_conf, lxc);
 
 extern int pivot_root(const char * new_root, const char * put_old);
 
-typedef int (*instanciate_cb)(struct lxc_netdev *);
+typedef int (*instanciate_cb)(struct lxc_handler *, struct lxc_netdev *);
 
 struct mount_opt {
 	char *name;
@@ -102,11 +120,11 @@ struct caps_opt {
 	int value;
 };
 
-static int instanciate_veth(struct lxc_netdev *);
-static int instanciate_macvlan(struct lxc_netdev *);
-static int instanciate_vlan(struct lxc_netdev *);
-static int instanciate_phys(struct lxc_netdev *);
-static int instanciate_empty(struct lxc_netdev *);
+static int instanciate_veth(struct lxc_handler *, struct lxc_netdev *);
+static int instanciate_macvlan(struct lxc_handler *, struct lxc_netdev *);
+static int instanciate_vlan(struct lxc_handler *, struct lxc_netdev *);
+static int instanciate_phys(struct lxc_handler *, struct lxc_netdev *);
+static int instanciate_empty(struct lxc_handler *, struct lxc_netdev *);
 
 static  instanciate_cb netdev_conf[LXC_NET_MAXCONFTYPE + 1] = {
 	[LXC_NET_VETH]    = instanciate_veth,
@@ -117,31 +135,36 @@ static  instanciate_cb netdev_conf[LXC_NET_MAXCONFTYPE + 1] = {
 };
 
 static struct mount_opt mount_opt[] = {
-	{ "defaults",   0, 0              },
-	{ "ro",         0, MS_RDONLY      },
-	{ "rw",         1, MS_RDONLY      },
-	{ "suid",       1, MS_NOSUID      },
-	{ "nosuid",     0, MS_NOSUID      },
-	{ "dev",        1, MS_NODEV       },
-	{ "nodev",      0, MS_NODEV       },
-	{ "exec",       1, MS_NOEXEC      },
-	{ "noexec",     0, MS_NOEXEC      },
-	{ "sync",       0, MS_SYNCHRONOUS },
-	{ "async",      1, MS_SYNCHRONOUS },
-	{ "remount",    0, MS_REMOUNT     },
-	{ "mand",       0, MS_MANDLOCK    },
-	{ "nomand",     1, MS_MANDLOCK    },
-	{ "atime",      1, MS_NOATIME     },
-	{ "noatime",    0, MS_NOATIME     },
-	{ "diratime",   1, MS_NODIRATIME  },
-	{ "nodiratime", 0, MS_NODIRATIME  },
-	{ "bind",       0, MS_BIND        },
-	{ "rbind",      0, MS_BIND|MS_REC },
-	{ NULL,         0, 0              },
+	{ "defaults",      0, 0              },
+	{ "ro",            0, MS_RDONLY      },
+	{ "rw",            1, MS_RDONLY      },
+	{ "suid",          1, MS_NOSUID      },
+	{ "nosuid",        0, MS_NOSUID      },
+	{ "dev",           1, MS_NODEV       },
+	{ "nodev",         0, MS_NODEV       },
+	{ "exec",          1, MS_NOEXEC      },
+	{ "noexec",        0, MS_NOEXEC      },
+	{ "sync",          0, MS_SYNCHRONOUS },
+	{ "async",         1, MS_SYNCHRONOUS },
+	{ "dirsync",       0, MS_DIRSYNC     },
+	{ "remount",       0, MS_REMOUNT     },
+	{ "mand",          0, MS_MANDLOCK    },
+	{ "nomand",        1, MS_MANDLOCK    },
+	{ "atime",         1, MS_NOATIME     },
+	{ "noatime",       0, MS_NOATIME     },
+	{ "diratime",      1, MS_NODIRATIME  },
+	{ "nodiratime",    0, MS_NODIRATIME  },
+	{ "bind",          0, MS_BIND        },
+	{ "rbind",         0, MS_BIND|MS_REC },
+	{ "relatime",      0, MS_RELATIME    },
+	{ "norelatime",    1, MS_RELATIME    },
+	{ "strictatime",   0, MS_STRICTATIME },
+	{ "nostrictatime", 1, MS_STRICTATIME },
+	{ NULL,            0, 0              },
 };
 
 static struct caps_opt caps_opt[] = {
-	{ "chown",             CAP_CHOWN 	     },
+	{ "chown",             CAP_CHOWN             },
 	{ "dac_override",      CAP_DAC_OVERRIDE      },
 	{ "dac_read_search",   CAP_DAC_READ_SEARCH   },
 	{ "fowner",            CAP_FOWNER            },
@@ -179,15 +202,82 @@ static struct caps_opt caps_opt[] = {
 	{ "setfcap",           CAP_SETFCAP           },
 	{ "mac_override",      CAP_MAC_OVERRIDE      },
 	{ "mac_admin",         CAP_MAC_ADMIN         },
+#ifdef CAP_SYSLOG
+	{ "syslog",            CAP_SYSLOG            },
+#endif
+#ifdef CAP_WAKE_ALARM
+	{ "wake_alarm",        CAP_WAKE_ALARM        },
+#endif
 };
 
-#if 0 /* will be reactivated with image mounting support */
-static int configure_find_fstype_cb(char* buffer, void *data)
+static int run_script(const char *name, const char *section,
+		      const char *script, ...)
+{
+	int ret;
+	FILE *f;
+	char *buffer, *p, *output;
+	size_t size = 0;
+	va_list ap;
+
+	INFO("Executing script '%s' for container '%s', config section '%s'",
+	     script, name, section);
+
+	va_start(ap, script);
+	while ((p = va_arg(ap, char *)))
+		size += strlen(p) + 1;
+	va_end(ap);
+
+	size += strlen(script);
+	size += strlen(name);
+	size += strlen(section);
+	size += 3;
+
+	if (size > INT_MAX)
+		return -1;
+
+	buffer = alloca(size);
+	if (!buffer) {
+		ERROR("failed to allocate memory");
+		return -1;
+	}
+
+	ret = sprintf(buffer, "%s %s %s", script, name, section);
+
+	va_start(ap, script);
+	while ((p = va_arg(ap, char *)))
+		ret += sprintf(buffer + ret, " %s", p);
+	va_end(ap);
+
+	f = popen(buffer, "r");
+	if (!f) {
+		SYSERROR("popen failed");
+		return -1;
+	}
+
+	output = malloc(LXC_LOG_BUFFER_SIZE);
+	if (!output) {
+		ERROR("failed to allocate memory for script output");
+		return -1;
+	}
+
+	while(fgets(output, LXC_LOG_BUFFER_SIZE, f))
+		DEBUG("script output: %s", output);
+
+	free(output);
+
+	if (pclose(f)) {
+		ERROR("Script exited on error");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int find_fstype_cb(char* buffer, void *data)
 {
 	struct cbarg {
 		const char *rootfs;
-		const char *testdir;
-		char *fstype;
+		const char *target;
 		int mntopt;
 	} *cbarg = data;
 
@@ -201,33 +291,37 @@ static int configure_find_fstype_cb(char* buffer, void *data)
 	fstype += lxc_char_left_gc(fstype, strlen(fstype));
 	fstype[lxc_char_right_gc(fstype, strlen(fstype))] = '\0';
 
-	if (mount(cbarg->rootfs, cbarg->testdir, fstype, cbarg->mntopt, NULL))
-		return 0;
+	DEBUG("trying to mount '%s'->'%s' with fstype '%s'",
+	      cbarg->rootfs, cbarg->target, fstype);
 
-	/* found ! */
-	umount(cbarg->testdir);
-	strcpy(cbarg->fstype, fstype);
+	if (mount(cbarg->rootfs, cbarg->target, fstype, cbarg->mntopt, NULL)) {
+		DEBUG("mount failed with error: %s", strerror(errno));
+		return 0;
+	}
+
+	INFO("mounted '%s' on '%s', with fstype '%s'",
+	     cbarg->rootfs, cbarg->target, fstype);
 
 	return 1;
 }
 
-/* find the filesystem type with brute force */
-static int configure_find_fstype(const char *rootfs, char *fstype, int mntopt)
+static int mount_unknow_fs(const char *rootfs, const char *target, int mntopt)
 {
-	int i, found;
+	int i;
 
 	struct cbarg {
 		const char *rootfs;
-		const char *testdir;
-		char *fstype;
+		const char *target;
 		int mntopt;
 	} cbarg = {
 		.rootfs = rootfs,
-		.fstype = fstype,
+		.target = target,
 		.mntopt = mntopt,
 	};
 
-	/* first we check with /etc/filesystems, in case the modules
+	/*
+	 * find the filesystem type with brute force:
+	 * first we check with /etc/filesystems, in case the modules
 	 * are auto-loaded and fall back to the supported kernel fs
 	 */
 	char *fsfile[] = {
@@ -235,90 +329,148 @@ static int configure_find_fstype(const char *rootfs, char *fstype, int mntopt)
 		"/proc/filesystems",
 	};
 
-	cbarg.testdir = tempnam("/tmp", "lxc-");
-	if (!cbarg.testdir) {
-		SYSERROR("failed to build a temp name");
-		return -1;
-	}
-
-	if (mkdir(cbarg.testdir, 0755)) {
-		SYSERROR("failed to create temporary directory");
-		return -1;
-	}
-
 	for (i = 0; i < sizeof(fsfile)/sizeof(fsfile[0]); i++) {
 
-		found = lxc_file_for_each_line(fsfile[i],
-					       configure_find_fstype_cb,
-					       &cbarg);
+		int ret;
 
-		if (found < 0) {
-			SYSERROR("failed to read '%s'", fsfile[i]);
-			goto out;
+		if (access(fsfile[i], F_OK))
+			continue;
+
+		ret = lxc_file_for_each_line(fsfile[i], find_fstype_cb, &cbarg);
+		if (ret < 0) {
+			ERROR("failed to parse '%s'", fsfile[i]);
+			return -1;
 		}
 
-		if (found)
-			break;
+		if (ret)
+			return 0;
 	}
 
-	if (!found) {
-		ERROR("failed to determine fs type for '%s'", rootfs);
+	ERROR("failed to determine fs type for '%s'", rootfs);
+	return -1;
+}
+
+static int mount_rootfs_dir(const char *rootfs, const char *target)
+{
+	return mount(rootfs, target, "none", MS_BIND | MS_REC, NULL);
+}
+
+static int setup_lodev(const char *rootfs, int fd, struct loop_info64 *loinfo)
+{
+	int rfd;
+	int ret = -1;
+
+	rfd = open(rootfs, O_RDWR);
+	if (rfd < 0) {
+		SYSERROR("failed to open '%s'", rootfs);
+		return -1;
+	}
+
+	memset(loinfo, 0, sizeof(*loinfo));
+
+	loinfo->lo_flags = LO_FLAGS_AUTOCLEAR;
+
+	if (ioctl(fd, LOOP_SET_FD, rfd)) {
+		SYSERROR("failed to LOOP_SET_FD");
 		goto out;
 	}
 
+	if (ioctl(fd, LOOP_SET_STATUS64, loinfo)) {
+		SYSERROR("failed to LOOP_SET_STATUS64");
+		goto out;
+	}
+
+	ret = 0;
 out:
-	rmdir(cbarg.testdir);
-	return found - 1;
+	close(rfd);
+
+	return ret;
 }
 
-static int configure_rootfs_dir_cb(const char *rootfs, const char *absrootfs,
-				   FILE *f)
+static int mount_rootfs_file(const char *rootfs, const char *target)
 {
-	return fprintf(f, "%s %s none rbind 0 0\n", absrootfs, rootfs);
-}
+	struct dirent dirent, *direntp;
+	struct loop_info64 loinfo;
+	int ret = -1, fd = -1;
+	DIR *dir;
+	char path[MAXPATHLEN];
 
-static int configure_rootfs_blk_cb(const char *rootfs, const char *absrootfs,
-				   FILE *f)
-{
-	char fstype[MAXPATHLEN];
-
-	if (configure_find_fstype(absrootfs, fstype, 0)) {
-		ERROR("failed to configure mount for block device '%s'",
-			      absrootfs);
+	dir = opendir("/dev");
+	if (!dir) {
+		SYSERROR("failed to open '/dev'");
 		return -1;
 	}
 
-	return fprintf(f, "%s %s %s defaults 0 0\n", absrootfs, rootfs, fstype);
+	while (!readdir_r(dir, &dirent, &direntp)) {
+
+		if (!direntp)
+			break;
+
+		if (!strcmp(direntp->d_name, "."))
+			continue;
+
+		if (!strcmp(direntp->d_name, ".."))
+			continue;
+
+		if (strncmp(direntp->d_name, "loop", 4))
+			continue;
+
+		sprintf(path, "/dev/%s", direntp->d_name);
+		fd = open(path, O_RDWR);
+		if (fd < 0)
+			continue;
+
+		if (ioctl(fd, LOOP_GET_STATUS64, &loinfo) == 0) {
+			close(fd);
+			continue;
+		}
+
+		if (errno != ENXIO) {
+			WARN("unexpected error for ioctl on '%s': %m",
+			     direntp->d_name);
+			continue;
+		}
+
+		DEBUG("found '%s' free lodev", path);
+
+		ret = setup_lodev(rootfs, fd, &loinfo);
+		if (!ret)
+			ret = mount_unknow_fs(path, target, 0);
+		close(fd);
+
+		break;
+	}
+
+	if (closedir(dir))
+		WARN("failed to close directory");
+
+	return ret;
 }
 
-static int configure_rootfs(const char *name, const char *rootfs)
+static int mount_rootfs_block(const char *rootfs, const char *target)
 {
-	char path[MAXPATHLEN];
-	char absrootfs[MAXPATHLEN];
-	char fstab[MAXPATHLEN];
-	struct stat s;
-	FILE *f;
-	int i, ret;
+	return mount_unknow_fs(rootfs, target, 0);
+}
 
-	typedef int (*rootfs_cb)(const char *, const char *, FILE *);
+static int mount_rootfs(const char *rootfs, const char *target)
+{
+	char absrootfs[MAXPATHLEN];
+	struct stat s;
+	int i;
+
+	typedef int (*rootfs_cb)(const char *, const char *);
 
 	struct rootfs_type {
 		int type;
 		rootfs_cb cb;
 	} rtfs_type[] = {
-		{ __S_IFDIR, configure_rootfs_dir_cb },
-		{ __S_IFBLK, configure_rootfs_blk_cb },
+		{ S_IFDIR, mount_rootfs_dir },
+		{ S_IFBLK, mount_rootfs_block },
+		{ S_IFREG, mount_rootfs_file },
 	};
 
 	if (!realpath(rootfs, absrootfs)) {
 		SYSERROR("failed to get real path for '%s'", rootfs);
-		return -1;
-	}
-
-	snprintf(path, MAXPATHLEN, LXCPATH "/%s/rootfs", name);
-
-	if (mkdir(path, 0755)) {
-		SYSERROR("failed to create the '%s' directory", path);
 		return -1;
 	}
 
@@ -337,32 +489,12 @@ static int configure_rootfs(const char *name, const char *rootfs)
 		if (!__S_ISTYPE(s.st_mode, rtfs_type[i].type))
 			continue;
 
-		snprintf(fstab, MAXPATHLEN, LXCPATH "/%s/fstab", name);
-
-		f = fopen(fstab, "a+");
-		if (!f) {
-			SYSERROR("failed to open fstab file");
-			return -1;
-		}
-
-		ret = rtfs_type[i].cb(path, absrootfs, f);
-
-		fclose(f);
-
-		if (ret < 0) {
-			ERROR("failed to add rootfs mount in fstab");
-			return -1;
-		}
-
-		snprintf(path, MAXPATHLEN, LXCPATH "/%s/rootfs/rootfs", name);
-
-		return symlink(absrootfs, path);
+		return rtfs_type[i].cb(absrootfs, target);
 	}
 
 	ERROR("unsupported rootfs type for '%s'", absrootfs);
 	return -1;
 }
-#endif
 
 static int setup_utsname(struct utsname *utsname)
 {
@@ -380,26 +512,62 @@ static int setup_utsname(struct utsname *utsname)
 }
 
 static int setup_tty(const struct lxc_rootfs *rootfs,
-		     const struct lxc_tty_info *tty_info)
+		     const struct lxc_tty_info *tty_info, char *ttydir)
 {
-	char path[MAXPATHLEN];
-	int i;
+	char path[MAXPATHLEN], lxcpath[MAXPATHLEN];
+	int i, ret;
+
+	if (!rootfs->path)
+		return 0;
 
 	for (i = 0; i < tty_info->nbtty; i++) {
 
 		struct lxc_pty_info *pty_info = &tty_info->pty_info[i];
 
-		snprintf(path, sizeof(path), "%s/dev/tty%d",
-			 rootfs->path ? rootfs->path : "", i + 1);
+		ret = snprintf(path, sizeof(path), "%s/dev/tty%d",
+			 rootfs->mount, i + 1);
+		if (ret >= sizeof(path)) {
+			ERROR("pathname too long for ttys");
+			return -1;
+		}
+		if (ttydir) {
+			/* create dev/lxc/tty%d" */
+			snprintf(lxcpath, sizeof(lxcpath), "%s/dev/%s/tty%d",
+				 rootfs->mount, ttydir, i + 1);
+			if (ret >= sizeof(lxcpath)) {
+				ERROR("pathname too long for ttys");
+				return -1;
+			}
+			ret = creat(lxcpath, 0660);
+			if (ret==-1 && errno != EEXIST) {
+				SYSERROR("error creating %s\n", lxcpath);
+				return -1;
+			}
+			close(ret);
+			ret = unlink(path);
+			if (ret && errno != ENOENT) {
+				SYSERROR("error unlinking %s\n", path);
+				return -1;
+			}
 
-		/* At this point I can not use the "access" function
-		 * to check the file is present or not because it fails
-		 * with EACCES errno and I don't know why :( */
+			if (mount(pty_info->name, lxcpath, "none", MS_BIND, 0)) {
+				WARN("failed to mount '%s'->'%s'",
+				     pty_info->name, path);
+				continue;
+			}
 
-		if (mount(pty_info->name, path, "none", MS_BIND, 0)) {
-			WARN("failed to mount '%s'->'%s'",
-			     pty_info->name, path);
-			continue;
+			snprintf(lxcpath, sizeof(lxcpath), "%s/tty%d", ttydir, i+1);
+			ret = symlink(lxcpath, path);
+			if (ret) {
+				SYSERROR("failed to create symlink for tty %d\n", i+1);
+				return -1;
+			}
+		} else {
+			if (mount(pty_info->name, path, "none", MS_BIND, 0)) {
+				WARN("failed to mount '%s'->'%s'",
+						pty_info->name, path);
+				continue;
+			}
 		}
 	}
 
@@ -585,35 +753,36 @@ static int setup_rootfs_pivot_root(const char *rootfs, const char *pivotdir)
 	if (remove_pivotdir && rmdir(pivotdir))
 		WARN("can't remove mountpoint '%s': %m", pivotdir);
 
-	INFO("pivoted to '%s'", rootfs);
-
 	return 0;
 }
 
 static int setup_rootfs(const struct lxc_rootfs *rootfs)
 {
-	char *mpath = LXCROOTFSMOUNT;
-
 	if (!rootfs->path)
 		return 0;
 
-	if (rootfs->mount)
-		mpath = rootfs->mount;
-
-	if (access(mpath, F_OK)) {
+	if (access(rootfs->mount, F_OK)) {
 		SYSERROR("failed to access to '%s', check it is present",
-			 mpath);
+			 rootfs->mount);
 		return -1;
 	}
 
-	if (mount(rootfs->path, mpath, "none", MS_BIND|MS_REC, NULL)) {
-		SYSERROR("failed to mount '%s'->'%s'", rootfs->path, mpath);
+	if (mount_rootfs(rootfs->path, rootfs->mount)) {
+		ERROR("failed to mount rootfs");
 		return -1;
 	}
 
-	DEBUG("mounted '%s' on '%s'", rootfs->path, mpath);
+	DEBUG("mounted '%s' on '%s'", rootfs->path, rootfs->mount);
 
-	if (setup_rootfs_pivot_root(mpath, rootfs->pivot)) {
+	return 0;
+}
+
+int setup_pivot_root(const struct lxc_rootfs *rootfs)
+{
+	if (!rootfs->path)
+		return 0;
+
+	if (setup_rootfs_pivot_root(rootfs->mount, rootfs->pivot)) {
 		ERROR("failed to setup pivot root");
 		return -1;
 	}
@@ -623,6 +792,8 @@ static int setup_rootfs(const struct lxc_rootfs *rootfs)
 
 static int setup_pts(int pts)
 {
+	char target[PATH_MAX];
+
 	if (!pts)
 		return 0;
 
@@ -631,7 +802,8 @@ static int setup_pts(int pts)
 		return -1;
 	}
 
-	if (mount("devpts", "/dev/pts", "devpts", MS_MGC_VAL, "newinstance,ptmxmode=0666")) {
+	if (mount("devpts", "/dev/pts", "devpts", MS_MGC_VAL,
+		  "newinstance,ptmxmode=0666")) {
 		SYSERROR("failed to mount a new instance of '/dev/pts'");
 		return -1;
 	}
@@ -642,6 +814,9 @@ static int setup_pts(int pts)
 		SYSERROR("failed to symlink '/dev/pts/ptmx'->'/dev/ptmx'");
 		return -1;
 	}
+
+	if (realpath("/dev/ptmx", target) && !strcmp(target, "/dev/pts/ptmx"))
+		goto out;
 
 	/* fallback here, /dev/pts/ptmx exists just mount bind */
 	if (mount("/dev/pts/ptmx", "/dev/ptmx", "none", MS_BIND, 0)) {
@@ -655,20 +830,36 @@ out:
 	return 0;
 }
 
-static int setup_console(const struct lxc_rootfs *rootfs,
+static int setup_personality(int persona)
+{
+	if (persona == -1)
+		return 0;
+
+	if (personality(persona) < 0) {
+		SYSERROR("failed to set personality to '0x%x'", persona);
+		return -1;
+	}
+
+	INFO("set personality to '0x%x'", persona);
+
+	return 0;
+}
+
+static int setup_dev_console(const struct lxc_rootfs *rootfs,
 			 const struct lxc_console *console)
 {
 	char path[MAXPATHLEN];
 	struct stat s;
+	int ret;
 
-	/* We don't have a rootfs, /dev/console will be shared */
-	if (!rootfs->path)
-		return 0;
-
-	snprintf(path, sizeof(path), "%s/dev/console", rootfs->path);
+	ret = snprintf(path, sizeof(path), "%s/dev/console", rootfs->mount);
+	if (ret >= sizeof(path)) {
+		ERROR("console path too long\n");
+		return -1;
+	}
 
 	if (access(path, F_OK)) {
-		WARN("rootfs specified but no console found");
+		WARN("rootfs specified but no console found at '%s'", path);
 		return 0;
 	}
 
@@ -694,8 +885,83 @@ static int setup_console(const struct lxc_rootfs *rootfs,
 	}
 
 	INFO("console has been setup");
+	return 0;
+}
+
+static int setup_ttydir_console(const struct lxc_rootfs *rootfs,
+			 const struct lxc_console *console,
+			 char *ttydir)
+{
+	char path[MAXPATHLEN], lxcpath[MAXPATHLEN];
+	int ret;
+
+	/* create rootfs/dev/<ttydir> directory */
+	ret = snprintf(path, sizeof(path), "%s/dev/%s", rootfs->mount,
+		       ttydir);
+	if (ret >= sizeof(path))
+		return -1;
+	ret = mkdir(path, 0755);
+	if (ret && errno != EEXIST) {
+		SYSERROR("failed with errno %d to create %s\n", errno, path);
+		return -1;
+	}
+	INFO("created %s\n", path);
+
+	ret = snprintf(lxcpath, sizeof(lxcpath), "%s/dev/%s/console",
+		       rootfs->mount, ttydir);
+	if (ret >= sizeof(lxcpath)) {
+		ERROR("console path too long\n");
+		return -1;
+	}
+
+	snprintf(path, sizeof(path), "%s/dev/console", rootfs->mount);
+	ret = unlink(path);
+	if (ret && errno != ENOENT) {
+		SYSERROR("error unlinking %s\n", path);
+		return -1;
+	}
+
+	ret = creat(lxcpath, 0660);
+	if (ret==-1 && errno != EEXIST) {
+		SYSERROR("error %d creating %s\n", errno, lxcpath);
+		return -1;
+	}
+	close(ret);
+
+	if (console->peer == -1) {
+		INFO("no console output required");
+		return 0;
+	}
+
+	if (mount(console->name, lxcpath, "none", MS_BIND, 0)) {
+		ERROR("failed to mount '%s' on '%s'", console->name, lxcpath);
+		return -1;
+	}
+
+	/* create symlink from rootfs/dev/console to 'lxc/console' */
+	snprintf(lxcpath, sizeof(lxcpath), "%s/console", ttydir);
+	ret = symlink(lxcpath, path);
+	if (ret) {
+		SYSERROR("failed to create symlink for console");
+		return -1;
+	}
+
+	INFO("console has been setup on %s", lxcpath);
 
 	return 0;
+}
+
+static int setup_console(const struct lxc_rootfs *rootfs,
+			 const struct lxc_console *console,
+			 char *ttydir)
+{
+	/* We don't have a rootfs, /dev/console will be shared */
+	if (!rootfs->path)
+		return 0;
+	if (!ttydir)
+		return setup_dev_console(rootfs, console);
+
+	return setup_ttydir_console(rootfs, console, ttydir);
 }
 
 static int setup_cgroup(const char *name, struct lxc_list *cgroups)
@@ -745,16 +1011,19 @@ static void parse_mntopt(char *opt, unsigned long *flags, char **data)
 	strcat(*data, opt);
 }
 
-static int parse_mntopts(struct mntent *mntent, unsigned long *mntflags,
+static int parse_mntopts(const char *mntopts, unsigned long *mntflags,
 			 char **mntdata)
 {
 	char *s, *data;
 	char *p, *saveptr = NULL;
 
-	if (!mntent->mnt_opts)
+	*mntdata = NULL;
+	*mntflags = 0L;
+
+	if (!mntopts)
 		return 0;
 
-	s = strdup(mntent->mnt_opts);
+	s = strdup(mntopts);
 	if (!s) {
 		SYSERROR("failed to allocate memory");
 		return -1;
@@ -781,50 +1050,130 @@ static int parse_mntopts(struct mntent *mntent, unsigned long *mntflags,
 	return 0;
 }
 
-static int mount_file_entries(FILE *file)
+static int mount_entry(const char *fsname, const char *target,
+		       const char *fstype, unsigned long mountflags,
+		       const char *data)
+{
+	if (mount(fsname, target, fstype, mountflags & ~MS_REMOUNT, data)) {
+		SYSERROR("failed to mount '%s' on '%s'", fsname, target);
+		return -1;
+	}
+
+	if ((mountflags & MS_REMOUNT) || (mountflags & MS_BIND)) {
+
+		DEBUG("remounting %s on %s to respect bind or remount options",
+		      fsname, target);
+
+		if (mount(fsname, target, fstype,
+			  mountflags | MS_REMOUNT, data)) {
+			SYSERROR("failed to mount '%s' on '%s'",
+				 fsname, target);
+			return -1;
+		}
+	}
+
+	DEBUG("mounted '%s' on '%s', type '%s'", fsname, target, fstype);
+
+	return 0;
+}
+
+static inline int mount_entry_on_systemfs(struct mntent *mntent)
+{
+	unsigned long mntflags;
+	char *mntdata;
+	int ret;
+
+	if (parse_mntopts(mntent->mnt_opts, &mntflags, &mntdata) < 0) {
+		ERROR("failed to parse mount option '%s'", mntent->mnt_opts);
+		return -1;
+	}
+
+	ret = mount_entry(mntent->mnt_fsname, mntent->mnt_dir,
+			  mntent->mnt_type, mntflags, mntdata);
+
+	free(mntdata);
+
+	return ret;
+}
+
+static int mount_entry_on_absolute_rootfs(struct mntent *mntent,
+					  const struct lxc_rootfs *rootfs)
+{
+	char *aux;
+	char path[MAXPATHLEN];
+	unsigned long mntflags;
+	char *mntdata;
+	int ret = 0;
+
+	if (parse_mntopts(mntent->mnt_opts, &mntflags, &mntdata) < 0) {
+		ERROR("failed to parse mount option '%s'", mntent->mnt_opts);
+		return -1;
+	}
+
+	aux = strstr(mntent->mnt_dir, rootfs->path);
+	if (!aux) {
+		WARN("ignoring mount point '%s'", mntent->mnt_dir);
+		goto out;
+	}
+
+	snprintf(path, MAXPATHLEN, "%s/%s", rootfs->mount,
+		 aux + strlen(rootfs->path));
+
+	ret = mount_entry(mntent->mnt_fsname, path, mntent->mnt_type,
+			  mntflags, mntdata);
+
+out:
+	free(mntdata);
+	return ret;
+}
+
+static int mount_entry_on_relative_rootfs(struct mntent *mntent,
+					  const char *rootfs)
+{
+	char path[MAXPATHLEN];
+	unsigned long mntflags;
+	char *mntdata;
+	int ret;
+
+	if (parse_mntopts(mntent->mnt_opts, &mntflags, &mntdata) < 0) {
+		ERROR("failed to parse mount option '%s'", mntent->mnt_opts);
+		return -1;
+	}
+
+        /* relative to root mount point */
+	snprintf(path, sizeof(path), "%s/%s", rootfs, mntent->mnt_dir);
+
+	ret = mount_entry(mntent->mnt_fsname, path, mntent->mnt_type,
+			  mntflags, mntdata);
+
+	free(mntdata);
+
+	return ret;
+}
+
+static int mount_file_entries(const struct lxc_rootfs *rootfs, FILE *file)
 {
 	struct mntent *mntent;
 	int ret = -1;
-	unsigned long mntflags;
-	char *mntdata;
 
 	while ((mntent = getmntent(file))) {
 
-		mntflags = 0;
-		mntdata = NULL;
-		if (parse_mntopts(mntent, &mntflags, &mntdata) < 0) {
-			ERROR("failed to parse mount option '%s'",
-				      mntent->mnt_opts);
-			goto out;
-		}
-
-		if (mount(mntent->mnt_fsname, mntent->mnt_dir,
-			  mntent->mnt_type, mntflags & ~MS_REMOUNT, mntdata)) {
-			SYSERROR("failed to mount '%s' on '%s'",
-					 mntent->mnt_fsname, mntent->mnt_dir);
-			goto out;
-		}
-
-		if ((mntflags & MS_REMOUNT) == MS_REMOUNT ||
-		    ((mntflags & MS_BIND) == MS_BIND)) {
-
-			DEBUG ("remounting %s on %s to respect bind " \
-			       "or remount options",
-			       mntent->mnt_fsname, mntent->mnt_dir);
-
-			if (mount(mntent->mnt_fsname, mntent->mnt_dir,
-				  mntent->mnt_type,
-				  mntflags | MS_REMOUNT, mntdata)) {
-				SYSERROR("failed to mount '%s' on '%s'",
-					 mntent->mnt_fsname, mntent->mnt_dir);
+		if (!rootfs->path) {
+			if (mount_entry_on_systemfs(mntent))
 				goto out;
-			}
+			continue;
 		}
 
-		DEBUG("mounted %s on %s, type %s", mntent->mnt_fsname,
-		      mntent->mnt_dir, mntent->mnt_type);
+		/* We have a separate root, mounts are relative to it */
+		if (mntent->mnt_dir[0] != '/') {
+			if (mount_entry_on_relative_rootfs(mntent,
+							   rootfs->mount))
+				goto out;
+			continue;
+		}
 
-		free(mntdata);
+		if (mount_entry_on_absolute_rootfs(mntent, rootfs))
+			goto out;
 	}
 
 	ret = 0;
@@ -834,7 +1183,7 @@ out:
 	return ret;
 }
 
-static int setup_mount(const char *fstab)
+static int setup_mount(const struct lxc_rootfs *rootfs, const char *fstab)
 {
 	FILE *file;
 	int ret;
@@ -848,13 +1197,13 @@ static int setup_mount(const char *fstab)
 		return -1;
 	}
 
-	ret = mount_file_entries(file);
+	ret = mount_file_entries(rootfs, file);
 
 	endmntent(file);
 	return ret;
 }
 
-static int setup_mount_entries(struct lxc_list *mount)
+static int setup_mount_entries(const struct lxc_rootfs *rootfs, struct lxc_list *mount)
 {
 	FILE *file;
 	struct lxc_list *iterator;
@@ -874,7 +1223,7 @@ static int setup_mount_entries(struct lxc_list *mount)
 
 	rewind(file);
 
-	ret = mount_file_entries(file);
+	ret = mount_file_entries(rootfs, file);
 
 	fclose(file);
 	return ret;
@@ -884,6 +1233,7 @@ static int setup_caps(struct lxc_list *caps)
 {
 	struct lxc_list *iterator;
 	char *drop_entry;
+	char *ptr;
 	int i, capid;
 
 	lxc_list_for_each(iterator, caps) {
@@ -899,6 +1249,21 @@ static int setup_caps(struct lxc_list *caps)
 
 			capid = caps_opt[i].value;
 			break;
+		}
+
+		if (capid < 0) {
+			/* try to see if it's numeric, so the user may specify
+			* capabilities  that the running kernel knows about but
+			* we don't */
+			capid = strtol(drop_entry, &ptr, 10);
+			if (!ptr || *ptr != '\0' ||
+			capid == LONG_MIN || capid == LONG_MAX)
+				/* not a valid number */
+				capid = -1;
+			else if (capid > lxc_caps_last_cap())
+				/* we have a number but it's not a valid
+				* capability */
+				capid = -1;
 		}
 
 	        if (capid < 0) {
@@ -1005,15 +1370,15 @@ static int setup_netdev(struct lxc_netdev *netdev)
 
 	/* empty network namespace */
 	if (!netdev->ifindex) {
-		if (netdev->flags | IFF_UP) {
-			err = lxc_device_up("lo");
+		if (netdev->flags & IFF_UP) {
+			err = lxc_netdev_up("lo");
 			if (err) {
 				ERROR("failed to set the loopback up : %s",
 				      strerror(-err));
 				return -1;
 			}
-			return 0;
 		}
+		return 0;
 	}
 
 	/* retrieve the name of the interface */
@@ -1029,7 +1394,7 @@ static int setup_netdev(struct lxc_netdev *netdev)
 			netdev->link : "eth%d";
 
 	/* rename the interface name */
-	err = lxc_device_rename(ifname, netdev->name);
+	err = lxc_netdev_rename_by_name(ifname, netdev->name);
 	if (err) {
 		ERROR("failed to rename %s->%s : %s", ifname, netdev->name,
 		      strerror(-err));
@@ -1069,10 +1434,10 @@ static int setup_netdev(struct lxc_netdev *netdev)
 	}
 
 	/* set the network device up */
-	if (netdev->flags | IFF_UP) {
+	if (netdev->flags & IFF_UP) {
 		int err;
 
-		err = lxc_device_up(current_ifname);
+		err = lxc_netdev_up(current_ifname);
 		if (err) {
 			ERROR("failed to set '%s' up : %s", current_ifname,
 			      strerror(-err));
@@ -1080,10 +1445,65 @@ static int setup_netdev(struct lxc_netdev *netdev)
 		}
 
 		/* the network is up, make the loopback up too */
-		err = lxc_device_up("lo");
+		err = lxc_netdev_up("lo");
 		if (err) {
 			ERROR("failed to set the loopback up : %s",
 			      strerror(-err));
+			return -1;
+		}
+	}
+
+	/* We can only set up the default routes after bringing
+	 * up the interface, sine bringing up the interface adds
+	 * the link-local routes and we can't add a default
+	 * route if the gateway is not reachable. */
+
+	/* setup ipv4 gateway on the interface */
+	if (netdev->ipv4_gateway) {
+		if (!(netdev->flags & IFF_UP)) {
+			ERROR("Cannot add ipv4 gateway for %s when not bringing up the interface", ifname);
+			return -1;
+		}
+
+		if (lxc_list_empty(&netdev->ipv4)) {
+			ERROR("Cannot add ipv4 gateway for %s when not assigning an address", ifname);
+			return -1;
+		}
+
+		err = lxc_ipv4_gateway_add(netdev->ifindex, netdev->ipv4_gateway);
+		if (err) {
+			ERROR("failed to setup ipv4 gateway for '%s': %s",
+				      ifname, strerror(-err));
+			if (netdev->ipv4_gateway_auto) {
+				char buf[INET_ADDRSTRLEN];
+				inet_ntop(AF_INET, netdev->ipv4_gateway, buf, sizeof(buf));
+				ERROR("tried to set autodetected ipv4 gateway '%s'", buf);
+			}
+			return -1;
+		}
+	}
+
+	/* setup ipv6 gateway on the interface */
+	if (netdev->ipv6_gateway) {
+		if (!(netdev->flags & IFF_UP)) {
+			ERROR("Cannot add ipv6 gateway for %s when not bringing up the interface", ifname);
+			return -1;
+		}
+
+		if (lxc_list_empty(&netdev->ipv6) && !IN6_IS_ADDR_LINKLOCAL(netdev->ipv6_gateway)) {
+			ERROR("Cannot add ipv6 gateway for %s when not assigning an address", ifname);
+			return -1;
+		}
+
+		err = lxc_ipv6_gateway_add(netdev->ifindex, netdev->ipv6_gateway);
+		if (err) {
+			ERROR("failed to setup ipv6 gateway for '%s': %s",
+				      ifname, strerror(-err));
+			if (netdev->ipv6_gateway_auto) {
+				char buf[INET6_ADDRSTRLEN];
+				inet_ntop(AF_INET, netdev->ipv6_gateway, buf, sizeof(buf));
+				ERROR("tried to set autodetected ipv6 gateway '%s'", buf);
+			}
 			return -1;
 		}
 	}
@@ -1114,6 +1534,41 @@ static int setup_network(struct lxc_list *network)
 	return 0;
 }
 
+static int setup_private_host_hw_addr(char *veth1)
+{
+	struct ifreq ifr;
+	int err;
+	int sockfd;
+
+	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (sockfd < 0)
+		return -errno;
+
+	snprintf((char *)ifr.ifr_name, IFNAMSIZ, "%s", veth1);
+	err = ioctl(sockfd, SIOCGIFHWADDR, &ifr);
+	if (err < 0) {
+		close(sockfd);
+		return -errno;
+	}
+
+	ifr.ifr_hwaddr.sa_data[0] = 0xfe;
+	err = ioctl(sockfd, SIOCSIFHWADDR, &ifr);
+	close(sockfd);
+	if (err < 0)
+		return -errno;
+
+	DEBUG("mac address of host interface '%s' changed to private "
+	      "%02x:%02x:%02x:%02x:%02x:%02x", veth1,
+	      ifr.ifr_hwaddr.sa_data[0] & 0xff,
+	      ifr.ifr_hwaddr.sa_data[1] & 0xff,
+	      ifr.ifr_hwaddr.sa_data[2] & 0xff,
+	      ifr.ifr_hwaddr.sa_data[3] & 0xff,
+	      ifr.ifr_hwaddr.sa_data[4] & 0xff,
+	      ifr.ifr_hwaddr.sa_data[5] & 0xff);
+
+	return 0;
+}
+
 struct lxc_conf *lxc_conf_init(void)
 {
 	struct lxc_conf *new;
@@ -1125,11 +1580,13 @@ struct lxc_conf *lxc_conf_init(void)
 	}
 	memset(new, 0, sizeof(*new));
 
+	new->personality = -1;
 	new->console.path = NULL;
 	new->console.peer = -1;
 	new->console.master = -1;
 	new->console.slave = -1;
 	new->console.name[0] = '\0';
+	new->rootfs.mount = LXCROOTFSMOUNT;
 	lxc_list_init(&new->cgroup);
 	lxc_list_init(&new->network);
 	lxc_list_init(&new->mount_list);
@@ -1138,7 +1595,7 @@ struct lxc_conf *lxc_conf_init(void)
 	return new;
 }
 
-static int instanciate_veth(struct lxc_netdev *netdev)
+static int instanciate_veth(struct lxc_handler *handler, struct lxc_netdev *netdev)
 {
 	char veth1buf[IFNAMSIZ], *veth1;
 	char veth2buf[IFNAMSIZ], *veth2;
@@ -1166,10 +1623,20 @@ static int instanciate_veth(struct lxc_netdev *netdev)
 		return -1;
 	}
 
+	/* changing the high byte of the mac address to 0xfe, the bridge interface
+	 * will always keep the host's mac address and not take the mac address
+	 * of a container */
+	err = setup_private_host_hw_addr(veth1);
+	if (err) {
+		ERROR("failed to change mac address of host interface '%s' : %s",
+			veth1, strerror(-err));
+		goto out_delete;
+	}
+
 	if (netdev->mtu) {
-		err = lxc_device_set_mtu(veth1, atoi(netdev->mtu));
+		err = lxc_netdev_set_mtu(veth1, atoi(netdev->mtu));
 		if (!err)
-			err = lxc_device_set_mtu(veth2, atoi(netdev->mtu));
+			err = lxc_netdev_set_mtu(veth2, atoi(netdev->mtu));
 		if (err) {
 			ERROR("failed to set mtu '%s' for %s-%s : %s",
 			      netdev->mtu, veth1, veth2, strerror(-err));
@@ -1192,13 +1659,17 @@ static int instanciate_veth(struct lxc_netdev *netdev)
 		goto out_delete;
 	}
 
-	if (netdev->flags & IFF_UP) {
-		err = lxc_device_up(veth1);
-		if (err) {
-			ERROR("failed to set %s up : %s", veth1,
-			      strerror(-err));
+	err = lxc_netdev_up(veth1);
+	if (err) {
+		ERROR("failed to set %s up : %s", veth1, strerror(-err));
+		goto out_delete;
+	}
+
+	if (netdev->upscript) {
+		err = run_script(handler->name, "net", netdev->upscript, "up",
+				 "veth", veth1, (char*) NULL);
+		if (err)
 			goto out_delete;
-		}
 	}
 
 	DEBUG("instanciated veth '%s/%s', index is '%d'",
@@ -1207,11 +1678,11 @@ static int instanciate_veth(struct lxc_netdev *netdev)
 	return 0;
 
 out_delete:
-	lxc_device_delete(veth1);
+	lxc_netdev_delete_by_name(veth1);
 	return -1;
 }
 
-static int instanciate_macvlan(struct lxc_netdev *netdev)
+static int instanciate_macvlan(struct lxc_handler *handler, struct lxc_netdev *netdev)
 {
 	char peerbuf[IFNAMSIZ], *peer;
 	int err;
@@ -1240,8 +1711,15 @@ static int instanciate_macvlan(struct lxc_netdev *netdev)
 	netdev->ifindex = if_nametoindex(peer);
 	if (!netdev->ifindex) {
 		ERROR("failed to retrieve the index for %s", peer);
-		lxc_device_delete(peer);
+		lxc_netdev_delete_by_name(peer);
 		return -1;
+	}
+
+	if (netdev->upscript) {
+		err = run_script(handler->name, "net", netdev->upscript, "up",
+				 "macvlan", netdev->link, (char*) NULL);
+		if (err)
+			return -1;
 	}
 
 	DEBUG("instanciated macvlan '%s', index is '%d' and mode '%d'",
@@ -1251,7 +1729,7 @@ static int instanciate_macvlan(struct lxc_netdev *netdev)
 }
 
 /* XXX: merge with instanciate_macvlan */
-static int instanciate_vlan(struct lxc_netdev *netdev)
+static int instanciate_vlan(struct lxc_handler *handler, struct lxc_netdev *netdev)
 {
 	char peer[IFNAMSIZ];
 	int err;
@@ -1273,7 +1751,7 @@ static int instanciate_vlan(struct lxc_netdev *netdev)
 	netdev->ifindex = if_nametoindex(peer);
 	if (!netdev->ifindex) {
 		ERROR("failed to retrieve the ifindex for %s", peer);
-		lxc_device_delete(peer);
+		lxc_netdev_delete_by_name(peer);
 		return -1;
 	}
 
@@ -1283,7 +1761,7 @@ static int instanciate_vlan(struct lxc_netdev *netdev)
 	return 0;
 }
 
-static int instanciate_phys(struct lxc_netdev *netdev)
+static int instanciate_phys(struct lxc_handler *handler, struct lxc_netdev *netdev)
 {
 	if (!netdev->link) {
 		ERROR("no link specified for the physical interface");
@@ -1296,17 +1774,33 @@ static int instanciate_phys(struct lxc_netdev *netdev)
 		return -1;
 	}
 
+	if (netdev->upscript) {
+		int err;
+		err = run_script(handler->name, "net", netdev->upscript,
+				 "up", "phys", netdev->link, (char*) NULL);
+		if (err)
+			return -1;
+	}
+
 	return 0;
 }
 
-static int instanciate_empty(struct lxc_netdev *netdev)
+static int instanciate_empty(struct lxc_handler *handler, struct lxc_netdev *netdev)
 {
 	netdev->ifindex = 0;
+	if (netdev->upscript) {
+		int err;
+		err = run_script(handler->name, "net", netdev->upscript,
+				 "up", "empty", (char*) NULL);
+		if (err)
+			return -1;
+	}
 	return 0;
 }
 
-int lxc_create_network(struct lxc_list *network)
+int lxc_create_network(struct lxc_handler *handler)
 {
+	struct lxc_list *network = &handler->conf->network;
 	struct lxc_list *iterator;
 	struct lxc_netdev *netdev;
 
@@ -1320,10 +1814,11 @@ int lxc_create_network(struct lxc_list *network)
 			return -1;
 		}
 
-		if (netdev_conf[netdev->type](netdev)) {
+		if (netdev_conf[netdev->type](handler, netdev)) {
 			ERROR("failed to create netdev");
 			return -1;
 		}
+
 	}
 
 	return 0;
@@ -1336,8 +1831,22 @@ void lxc_delete_network(struct lxc_list *network)
 
 	lxc_list_for_each(iterator, network) {
 		netdev = iterator->elem;
-		if (netdev->ifindex > 0 && netdev->type != LXC_NET_PHYS)
-			lxc_device_delete_index(netdev->ifindex);
+		if (netdev->ifindex == 0)
+			continue;
+
+		if (netdev->type == LXC_NET_PHYS) {
+			if (lxc_netdev_rename_by_index(netdev->ifindex, netdev->link))
+				WARN("failed to rename to the initial name the " \
+				     "netdev '%s'", netdev->link);
+			continue;
+		}
+
+		/* Recent kernel remove the virtual interfaces when the network
+		 * namespace is destroyed but in case we did not moved the
+		 * interface to the network namespace, we have to destroy it
+		 */
+		if (lxc_netdev_delete_by_index(netdev->ifindex))
+			WARN("failed to remove interface '%s'", netdev->name);
 	}
 }
 
@@ -1355,14 +1864,62 @@ int lxc_assign_network(struct lxc_list *network, pid_t pid)
 		if (!netdev->ifindex)
 			continue;
 
-		err = lxc_device_move(netdev->ifindex, pid);
+		err = lxc_netdev_move_by_index(netdev->ifindex, pid);
 		if (err) {
 			ERROR("failed to move '%s' to the container : %s",
 			      netdev->link, strerror(-err));
 			return -1;
 		}
 
-		DEBUG("move '%s' to '%d'", netdev->link, pid);
+		DEBUG("move '%s' to '%d'", netdev->name, pid);
+	}
+
+	return 0;
+}
+
+int lxc_find_gateway_addresses(struct lxc_handler *handler)
+{
+	struct lxc_list *network = &handler->conf->network;
+	struct lxc_list *iterator;
+	struct lxc_netdev *netdev;
+	int link_index;
+
+	lxc_list_for_each(iterator, network) {
+		netdev = iterator->elem;
+
+		if (!netdev->ipv4_gateway_auto && !netdev->ipv6_gateway_auto)
+			continue;
+
+		if (netdev->type != LXC_NET_VETH && netdev->type != LXC_NET_MACVLAN) {
+			ERROR("gateway = auto only supported for "
+			      "veth and macvlan");
+			return -1;
+		}
+
+		if (!netdev->link) {
+			ERROR("gateway = auto needs a link interface");
+			return -1;
+		}
+
+		link_index = if_nametoindex(netdev->link);
+		if (!link_index)
+			return -EINVAL;
+
+		if (netdev->ipv4_gateway_auto) {
+			if (lxc_ipv4_addr_get(link_index, &netdev->ipv4_gateway)) {
+				ERROR("failed to automatically find ipv4 gateway "
+				      "address from link interface '%s'", netdev->link);
+				return -1;
+			}
+		}
+
+		if (netdev->ipv6_gateway_auto) {
+			if (lxc_ipv6_addr_get(link_index, &netdev->ipv6_gateway)) {
+				ERROR("failed to automatically find ipv6 gateway "
+				      "address from link interface '%s'", netdev->link);
+				return -1;
+			}
+		}
 	}
 
 	return 0;
@@ -1440,38 +1997,48 @@ int lxc_setup(const char *name, struct lxc_conf *lxc_conf)
 		return -1;
 	}
 
+	if (setup_rootfs(&lxc_conf->rootfs)) {
+		ERROR("failed to setup rootfs for '%s'", name);
+		return -1;
+	}
+
+	if (setup_mount(&lxc_conf->rootfs, lxc_conf->fstab)) {
+		ERROR("failed to setup the mounts for '%s'", name);
+		return -1;
+	}
+
+	if (setup_mount_entries(&lxc_conf->rootfs, &lxc_conf->mount_list)) {
+		ERROR("failed to setup the mount entries for '%s'", name);
+		return -1;
+	}
+
 	if (setup_cgroup(name, &lxc_conf->cgroup)) {
 		ERROR("failed to setup the cgroups for '%s'", name);
 		return -1;
 	}
 
-	if (setup_mount(lxc_conf->fstab)) {
-		ERROR("failed to setup the mounts for '%s'", name);
-		return -1;
-	}
-
-	if (setup_mount_entries(&lxc_conf->mount_list)) {
-		ERROR("failed to setup the mount entries for '%s'", name);
-		return -1;
-	}
-
-	if (setup_console(&lxc_conf->rootfs, &lxc_conf->console)) {
+	if (setup_console(&lxc_conf->rootfs, &lxc_conf->console, lxc_conf->ttydir)) {
 		ERROR("failed to setup the console for '%s'", name);
 		return -1;
 	}
 
-	if (setup_tty(&lxc_conf->rootfs, &lxc_conf->tty_info)) {
+	if (setup_tty(&lxc_conf->rootfs, &lxc_conf->tty_info, lxc_conf->ttydir)) {
 		ERROR("failed to setup the ttys for '%s'", name);
 		return -1;
 	}
 
-	if (setup_rootfs(&lxc_conf->rootfs)) {
+	if (setup_pivot_root(&lxc_conf->rootfs)) {
 		ERROR("failed to set rootfs for '%s'", name);
 		return -1;
 	}
 
 	if (setup_pts(lxc_conf->pts)) {
 		ERROR("failed to setup the new pts instance");
+		return -1;
+	}
+
+	if (setup_personality(lxc_conf->personality)) {
+		ERROR("failed to setup personality");
 		return -1;
 	}
 

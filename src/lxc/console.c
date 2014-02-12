@@ -47,7 +47,7 @@ extern int lxc_console(const char *name, int ttynum, int *fd)
 		.request = { .type = LXC_COMMAND_TTY, .data = ttynum },
 	};
 
-	ret = lxc_command(name, &command, &stopped);
+	ret = lxc_command_connected(name, &command, &stopped);
 	if (ret < 0 && stopped) {
 		ERROR("'%s' is stopped", name);
 		return -1;
@@ -176,6 +176,9 @@ int lxc_create_console(struct lxc_conf *conf)
 		return -1;
 	}
 
+	if (!strcmp(console->path, "none"))
+		return 0;
+
 	if (openpty(&console->master, &console->slave,
 		    console->name, NULL, NULL)) {
 		SYSERROR("failed to allocate a pty");
@@ -297,6 +300,11 @@ int lxc_console_mainloop_add(struct lxc_epoll_descr *descr,
 
 	if (!console->path) {
 		INFO("no console specified");
+		return 0;
+	}
+
+	if (console->peer == -1) {
+		INFO("no console will be used");
 		return 0;
 	}
 

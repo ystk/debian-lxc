@@ -57,8 +57,10 @@ static struct lxc_list defines;
 static int my_parser(struct lxc_arguments* args, int c, char* arg)
 {
 	switch (c) {
-	case 'd': args->daemonize = 1; break;
+	case 'c': args->console = arg; break;
+	case 'd': args->daemonize = 1; args->close_all_fds = 1; break;
 	case 'f': args->rcfile = arg; break;
+	case 'C': args->close_all_fds = 1; break;
 	case 's': return lxc_config_define_add(&defines, arg);
 	}
 	return 0;
@@ -68,6 +70,8 @@ static const struct option my_longopts[] = {
 	{"daemon", no_argument, 0, 'd'},
 	{"rcfile", required_argument, 0, 'f'},
 	{"define", required_argument, 0, 's'},
+	{"console", required_argument, 0, 'c'},
+	{"close-all-fds", no_argument, 0, 'C'},
 	LXC_COMMON_OPTIONS
 };
 
@@ -82,6 +86,10 @@ Options :\n\
   -n, --name=NAME      NAME for name of the container\n\
   -d, --daemon         daemonize the container\n\
   -f, --rcfile=FILE    Load configuration file FILE\n\
+  -c, --console=FILE   Set the file output for the container console\n\
+  -C, --close-all-fds  If any fds are inherited, close them\n\
+                       If not specified, exit with failure instead\n\
+		       Note: --daemon implies --close-all-fds\n\
   -s, --define KEY=VAL Assign VAL to configuration variable KEY\n",
 	.options   = my_longopts,
 	.parser    = my_parser,
@@ -116,6 +124,11 @@ int main(int argc, char *argv[])
 	if (lxc_log_init(my_args.log_file, my_args.log_priority,
 			 my_args.progname, my_args.quiet))
 		return err;
+
+	if (putenv("container=lxc")) {
+		SYSERROR("failed to set environment variable");
+		return err;
+	}
 
 	/* rcfile is specified in the cli option */
 	if (my_args.rcfile)
@@ -155,29 +168,44 @@ int main(int argc, char *argv[])
 		return err;
 	}
 
-	if (my_args.daemonize) {
+	if (my_args.console) {
 
-                /* do not chdir as we want to open the log file,
-		 * change the directory right after.
-		 * do not close 0, 1, 2, we want to do that
-		 * ourself because we don't want /dev/null
-		 * being reopened.
-		 */
-		if (daemon(1, 1)) {
-			SYSERROR("failed to daemonize '%s'", my_args.name);
+		char *console, fd;
+
+		if (access(my_args.console, W_OK)) {
+
+			fd = creat(my_args.console, 0600);
+			if (fd < 0) {
+				SYSERROR("failed to touch file '%s'",
+					 my_args.console);
+				return err;
+			}
+			close(fd);
+		}
+
+		console = realpath(my_args.console, NULL);
+		if (!console) {
+			SYSERROR("failed to get the real path of '%s'",
+				 my_args.console);
 			return err;
 		}
 
-		close(0);
-		close(1);
-		close(2);
-
-		if (my_args.log_file) {
-			open(my_args.log_file, O_WRONLY | O_CLOEXEC);
-			open(my_args.log_file, O_RDONLY | O_CLOEXEC);
-			open(my_args.log_file, O_RDONLY | O_CLOEXEC);
+		conf->console.path = strdup(console);
+		if (!conf->console.path) {
+			ERROR("failed to dup string '%s'", console);
+			return err;
 		}
+
+		free(console);
 	}
+
+	if (my_args.daemonize && daemon(0, 0)) {
+		SYSERROR("failed to daemonize '%s'", my_args.name);
+		return err;
+	}
+
+	if (my_args.close_all_fds)
+		conf->close_all_fds = 1;
 
 	err = lxc_start(my_args.name, args, conf);
 
