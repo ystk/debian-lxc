@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,31 +18,24 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _attach_h
-#define _attach_h
+#ifndef __LXC_ATTACH_H
+#define __LXC_ATTACH_H
 
 #include <sys/types.h>
+#include <lxc/attach_options.h>
 
-struct lxc_proc_cgroup_info {
-	char *subsystems;
-	char *cgroup;
-};
+struct lxc_conf;
 
 struct lxc_proc_context_info {
-	unsigned long personality;
+	char *lsm_label;
+	struct lxc_container *container;
+	signed long personality;
 	unsigned long long capability_mask;
-	struct lxc_proc_cgroup_info* cgroups;
-	int cgroups_count;
 };
 
-extern struct lxc_proc_context_info *lxc_proc_get_context_info(pid_t pid);
-extern void lxc_proc_free_context_info(struct lxc_proc_context_info *info);
-
-extern int lxc_attach_proc_to_cgroups(pid_t pid, struct lxc_proc_context_info *ctx);
-extern int lxc_attach_to_ns(pid_t other_pid);
-extern int lxc_attach_drop_privs(struct lxc_proc_context_info *ctx);
+extern int lxc_attach(const char* name, const char* lxcpath, lxc_attach_exec_t exec_function, void* exec_payload, lxc_attach_options_t* options, pid_t* attached_process);
 
 #endif

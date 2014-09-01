@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,12 +18,16 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef __monitor_h
-#define __monitor_h
+#ifndef __LXC_MONITOR_H
+#define __LXC_MONITOR_H
 
+#include <limits.h>
 #include <sys/param.h>
+#include <sys/un.h>
+
+#include "conf.h"
 
 typedef enum {
 	lxc_msg_state,
@@ -32,12 +36,16 @@ typedef enum {
 
 struct lxc_msg {
 	lxc_msg_type_t type;
-	char name[MAXPATHLEN];
+	char name[NAME_MAX+1];
 	int value;
 };
 
-void lxc_monitor_send_state(const char *name, lxc_state_t state);
-void lxc_monitor_send_priority(const char *name, int priority);
-void lxc_monitor_cleanup(const char *name);
+extern int lxc_monitor_open(const char *lxcpath);
+extern int lxc_monitor_sock_name(const char *lxcpath, struct sockaddr_un *addr);
+extern int lxc_monitor_fifo_name(const char *lxcpath, char *fifo_path,
+				 size_t fifo_path_sz, int do_mkdirp);
+extern void lxc_monitor_send_state(const char *name, lxc_state_t state,
+			    const char *lxcpath);
+extern int lxc_monitord_spawn(const char *lxcpath);
 
 #endif

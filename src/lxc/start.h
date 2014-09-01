@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,13 +18,17 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef __lxc_state_h
-#define __lxc_state_h
+#ifndef __LXC_START_H
+#define __LXC_START_H
 
-#include <lxc/state.h>
+#include <signal.h>
 #include <sys/param.h>
+
+#include "config.h"
+#include "state.h"
+#include "namespace.h"
 
 struct lxc_conf;
 
@@ -35,28 +39,46 @@ struct lxc_operations {
 	int (*post_start)(struct lxc_handler *, void *);
 };
 
+struct cgroup_desc;
+
+enum {
+	LXC_NS_MNT,
+	LXC_NS_PID,
+	LXC_NS_UTS,
+	LXC_NS_IPC,
+	LXC_NS_USER,
+	LXC_NS_NET,
+	LXC_NS_MAX
+};
+
+struct ns_info {
+	const char *proc_name;
+	int clone_flag;
+};
+
+extern const struct ns_info ns_info[LXC_NS_MAX];
+
 struct lxc_handler {
 	pid_t pid;
 	char *name;
 	lxc_state_t state;
+	int clone_flags;
 	int sigfd;
 	sigset_t oldmask;
 	struct lxc_conf *conf;
 	struct lxc_operations *ops;
 	void *data;
 	int sv[2];
+	int pinfd;
+	const char *lxcpath;
+	void *cgroup_data;
 };
 
-extern struct lxc_handler *lxc_init(const char *name, struct lxc_conf *);
-extern int lxc_spawn(struct lxc_handler *);
+extern struct lxc_handler *lxc_init(const char *name, struct lxc_conf *, const char *);
 
-extern int lxc_poll(const char *name, struct lxc_handler *handler);
-extern void lxc_abort(const char *name, struct lxc_handler *handler);
-extern void lxc_fini(const char *name, struct lxc_handler *handler);
-extern int lxc_set_state(const char *, struct lxc_handler *, lxc_state_t);
 extern int lxc_check_inherited(struct lxc_conf *conf, int fd_to_ignore);
 int __lxc_start(const char *, struct lxc_conf *, struct lxc_operations *,
-		void *);
+		void *, const char *);
 
 #endif
 

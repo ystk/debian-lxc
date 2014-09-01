@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,10 +18,10 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef _network_h
-#define _network_h
+#ifndef __LXC_NETWORK_H
+#define __LXC_NETWORK_H
 
 /*
  * Convert a string mac address to a socket structure
@@ -32,6 +32,7 @@ extern int lxc_convert_mac(char *macaddr, struct sockaddr *sockaddr);
  * Move a device between namespaces
  */
 extern int lxc_netdev_move_by_index(int ifindex, pid_t pid);
+extern int lxc_netdev_move_by_name(char *ifname, pid_t pid);
 
 /*
  * Delete a network device
@@ -44,6 +45,8 @@ extern int lxc_netdev_delete_by_index(int ifindex);
  */
 extern int lxc_netdev_rename_by_name(const char *oldname, const char *newname);
 extern int lxc_netdev_rename_by_index(int ifindex, const char *newname);
+
+extern int netdev_set_flag(const char *name, int flag);
 
 /*
  * Set the device network up or down
@@ -61,7 +64,7 @@ extern int lxc_netdev_set_mtu(const char *name, int mtu);
  */
 extern int lxc_veth_create(const char *name1, const char *name2);
 extern int lxc_macvlan_create(const char *master, const char *name, int mode);
-extern int lxc_vlan_create(const char *master, const char *name, ushort vid);
+extern int lxc_vlan_create(const char *master, const char *name, unsigned short vid);
 
 /*
  * Activate forwarding
@@ -90,6 +93,12 @@ extern int lxc_ipv4_addr_get(int ifindex, struct in_addr **res);
 extern int lxc_ipv6_addr_get(int ifindex, struct in6_addr **res);
 
 /*
+ * Set a destination route to an interface
+ */
+extern int lxc_ipv4_dest_add(int ifindex, struct in_addr *dest);
+extern int lxc_ipv6_dest_add(int ifindex, struct in6_addr *dest);
+
+/*
  * Set default route.
  */
 extern int lxc_ipv4_gateway_add(int ifindex, struct in_addr *gw);
@@ -100,7 +109,7 @@ extern int lxc_ipv6_gateway_add(int ifindex, struct in6_addr *gw);
  */
 extern int lxc_bridge_attach(const char *bridge, const char *ifname);
 
-/* 
+/*
  * Create default gateway
  */
 extern int lxc_route_create_default(const char *addr, const char *ifname,
@@ -122,4 +131,12 @@ extern int lxc_neigh_proxy_on(const char *name, int family);
  */
 extern int lxc_neigh_proxy_off(const char *name, int family);
 
+/*
+ * Generate a new unique network interface name
+ */
+extern char *lxc_mkifname(char *template);
+
+extern const char *lxc_net_type_to_str(int type);
+extern int setup_private_host_hw_addr(char *veth1);
+extern int netdev_get_mtu(int ifindex);
 #endif

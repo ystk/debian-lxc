@@ -1,80 +1,60 @@
 #!/usr/bin/make -f
 
-SHELL := sh -e
+-include /usr/share/dpkg/vendor.mk
 
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
 %:
-	dh ${@} --with autotools_dev
+	dh ${@} --parallel --with autoreconf,autotools_dev,python3,systemd
 
 override_dh_auto_configure:
-	dh_auto_configure -- --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc --libexecdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) --with-rootfs-path=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc --enable-doc
+	dh_auto_configure -- \
+		--disable-rpath \
+		--enable-doc \
+		--enable-api-docs \
+		--enable-apparmor \
+		--enable-selinux \
+		--disable-cgmanager \
+		--enable-capabilities \
+		--enable-examples \
+		--enable-python \
+		--disable-mutex-debugging \
+		--enable-lua \
+		--enable-bash \
+		--enable-tests \
+		--enable-configpath-log \
+		--with-distro=debian \
+		--with-init-script=sysvinit,systemd
 
 override_dh_auto_install:
-	dh_auto_install
+	dh_auto_install -- SYSTEMD_UNIT_DIR=/lib/systemd/system
 
-	# creating lxc directories
-	mkdir -p debian/tmp/etc/lxc/auto
-	mkdir -p debian/tmp/etc/lxc/debconf
-	mkdir -p debian/tmp/usr/share/lxc/cache
-	mkdir -p debian/tmp/usr/share/lxc/packages
-	mkdir -p debian/tmp/var/log/lxc
+	# fix systemd service
+	sed -i -e 's|$${prefix}/lib/.*/lxc/|/usr/lib/$(DEB_HOST_MULTIARCH)/lxc/|g' debian/tmp/lib/systemd/system/lxc.service
 
-	# debian local additions
-	mkdir -p debian/lxc/usr/bin
-	cp debian/local/lxc debian/lxc/usr/bin
-	cp debian/local/lxc-backup debian/lxc/usr/bin
-	cp debian/local/lxc-halt debian/lxc/usr/bin
-	cp debian/local/lxc-list debian/lxc/usr/bin
-	cp debian/local/lxc-ls debian/lxc/usr/bin
-	cp debian/local/lxc-restore debian/lxc/usr/bin
+	# removing unused files
+	rm -rf debian/tmp/usr/include
+	rm -f debian/tmp/usr/lib/*/*.so
+	rm -rf debian/tmp/usr/lib/*/pkgconfig
 
-	mkdir -p debian/lxc/etc/bash_completion.d
-	cp debian/local/lxc.sh debian/lxc/etc/bash_completion.d
-
-	mkdir -p debian/lxc/usr/share/lxc/templates
-	cp -r debian/local/lxc-debconf* debian/lxc/usr/share/lxc/templates
-
-	# replacing upstreams debian template
-	rm -f debian/tmp/usr/share/lxc/templates/lxc-debian
-	ln -s lxc-debconf debian/tmp/usr/share/lxc/templates/lxc-debian
-	ln -s lxc-debconf.d debian/tmp/usr/share/lxc/templates/lxc-debian.d
-
-	# adding progress template symlink
-	ln -s lxc-debconf debian/tmp/usr/share/lxc/templates/lxc-progress
-	ln -s lxc-debconf.d debian/tmp/usr/share/lxc/templates/lxc-progress.d
-
-	# removing currently unsupported lxc-ubuntu until lxc-debconf also supports ubuntu
-	rm -f debian/tmp/usr/share/lxc/templates/lxc-ubuntu
-
-	# removing useless files
-	rm -f debian/tmp/usr/bin/lxc-ls
-	rm -f debian/tmp/usr/share/lxc/templates/lxc-busybox
-	rm -f debian/tmp/usr/share/lxc/templates/lxc-lenny
+	# remove lxc-top until lua-alt-getopt is available
+ifeq ($(DEB_VENDOR),Debian)
+	rm -f debian/tmp/usr/bin/lxc-top
+	rm -f debian/tmp/usr/share/man/*/lxc-top.*
+	rm -f debian/tmp/usr/share/man/*/*/lxc-top.*
+endif
 
 override_dh_builddeb:
-	dh_builddeb -- -Zxz -z9
+	dh_builddeb -- -Zxz
 
 override_dh_compress:
 	dh_compress -X.cfg
-
-override_dh_fixperms:
-	dh_fixperms
-
-	chmod 0700 debian/lxc/var/log/lxc
-
-override_dh_gencontrol:
-ifeq ($(DEB_HOST_MULTIARCH),)
-	dh_gencontrol
-else
-	dh_gencontrol -- -Vmultiarch:Pre-Depends="multiarch-support"
-endif
 
 override_dh_install:
 	dh_install --fail-missing
 
 override_dh_installinit:
-	dh_installinit --no-restart-on-upgrade
+	dh_installinit -p lxc --onlyscripts --no-restart-on-upgrade --no-start --name lxc
 
 override_dh_strip:
 	dh_strip --dbg-package=lxc-dbg

@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,14 +18,18 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-extern int lxc_af_unix_open(const char *path, int type, int flags);
-extern int lxc_af_unix_close(int fd);
-extern int lxc_af_unix_connect(const char *path);
-extern int lxc_af_unix_send_fd(int fd, int sendfd, void *data, size_t size);
-extern int lxc_af_unix_recv_fd(int fd, int *recvfd, void *data, size_t size);
-extern int lxc_af_unix_send_credential(int fd, void *data, size_t size);
-extern int lxc_af_unix_rcv_credential(int fd, void *data, size_t size);
+#ifndef __LXC_AF_UNIX_H
+#define __LXC_AF_UNIX_H
 
+extern int lxc_abstract_unix_open(const char *path, int type, int flags);
+extern int lxc_abstract_unix_close(int fd);
+extern int lxc_abstract_unix_connect(const char *path);
+extern int lxc_abstract_unix_send_fd(int fd, int sendfd, void *data, size_t size);
+extern int lxc_abstract_unix_recv_fd(int fd, int *recvfd, void *data, size_t size);
+extern int lxc_abstract_unix_send_credential(int fd, void *data, size_t size);
+extern int lxc_abstract_unix_rcv_credential(int fd, void *data, size_t size);
+
+#endif

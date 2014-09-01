@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,7 +18,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <stdio.h>
@@ -42,63 +42,93 @@ lxc_log_define(lxc_init, lxc);
 
 static int quiet;
 
-static struct option options[] = {
-	{ "quiet", no_argument, &quiet, 1 },
+static const struct option options[] = {
+	{ "name",        required_argument, NULL, 'n' },
+	{ "logpriority", required_argument, NULL, 'l' },
+	{ "quiet",       no_argument,       NULL, 'q' },
+	{ "lxcpath",     required_argument, NULL, 'P' },
 	{ 0, 0, 0, 0 },
 };
 
-static	int was_interrupted = 0;
+static sig_atomic_t was_interrupted = 0;
+
+static void interrupt_handler(int sig)
+{
+	if (!was_interrupted)
+		was_interrupted = sig;
+}
+
+static void usage(void) {
+	fprintf(stderr, "Usage: lxc-init [OPTION]...\n\n"
+		"Common options :\n"
+		"  -n, --name=NAME          NAME for name of the container\n"
+		"  -l, --logpriority=LEVEL  Set log priority to LEVEL\n"
+		"  -q, --quiet              Don't produce any output\n"
+		"  -P, --lxcpath=PATH       Use specified container path\n"
+		"  -?, --help               Give this help list\n"
+		"\n"
+		"Mandatory or optional arguments to long options are also mandatory or optional\n"
+		"for any corresponding short options.\n"
+		"\n"
+		"NOTE: lxc-init is intended for use by lxc internally\n"
+		"      and does not need to be run by hand\n\n");
+}
 
 int main(int argc, char *argv[])
 {
-
-	void interrupt_handler(int sig)
-	{
-		if (!was_interrupted)
-			was_interrupted = sig;
-	}
-
 	pid_t pid;
-	int nbargs = 0;
-	int err = -1;
+	int err;
 	char **aargv;
 	sigset_t mask, omask;
-	int i, shutdown = 0;
+	int i, have_status = 0, shutdown = 0;
+	int opt;
+	char *lxcpath = NULL, *name = NULL, *logpriority = NULL;
 
-	while (1) {
-		int ret = getopt_long_only(argc, argv, "", options, NULL);
-		if (ret == -1) {
+	while ((opt = getopt_long(argc, argv, "n:l:qP:", options, NULL)) != -1) {
+		switch(opt) {
+		case 'n':
+			name = optarg;
 			break;
+		case 'l':
+			logpriority = optarg;
+			break;
+		case 'q':
+			quiet = 1;
+ 			break;
+		case 'P':
+			lxcpath = optarg;
+			break;
+		default: /* '?' */
+			usage();
+			exit(EXIT_FAILURE);
 		}
-		if  (ret == '?')
-			exit(err);
-
-		nbargs++;
 	}
 
-	if (lxc_caps_init())
-		exit(err);
-
-	if (lxc_log_init(NULL, 0, basename(argv[0]), quiet))
-		exit(err);
+	err = lxc_log_init(name, name ? NULL : "none", logpriority,
+			   basename(argv[0]), quiet, lxcpath);
+	if (err < 0)
+		exit(EXIT_FAILURE);
+	lxc_log_options_no_override();
 
 	if (!argv[optind]) {
 		ERROR("missing command to launch");
-		exit(err);
+		exit(EXIT_FAILURE);
 	}
 
 	aargv = &argv[optind];
-	argc -= nbargs;
 
         /*
 	 * mask all the signals so we are safe to install a
 	 * signal handler and to fork
 	 */
-	sigfillset(&mask);
-	sigdelset(&mask, SIGILL);
-	sigdelset(&mask, SIGSEGV);
-	sigdelset(&mask, SIGBUS);
-	sigprocmask(SIG_SETMASK, &mask, &omask);
+	if (sigfillset(&mask) ||
+	    sigdelset(&mask, SIGILL) ||
+	    sigdelset(&mask, SIGSEGV) ||
+	    sigdelset(&mask, SIGBUS) ||
+	    sigprocmask(SIG_SETMASK, &mask, &omask)) {
+		SYSERROR("failed to set signal mask");
+		exit(EXIT_FAILURE);
+	}
 
 	for (i = 1; i < NSIG; i++) {
 		struct sigaction act;
@@ -111,30 +141,34 @@ int main(int argc, char *argv[])
 		    i == SIGSEGV ||
 		    i == SIGBUS ||
 		    i == SIGSTOP ||
-		    i == SIGKILL)
+		    i == SIGKILL ||
+		    i == 32 || i == 33)
 			continue;
 
-		sigfillset(&act.sa_mask);
-		sigdelset(&act.sa_mask, SIGILL);
-		sigdelset(&act.sa_mask, SIGSEGV);
-		sigdelset(&act.sa_mask, SIGBUS);
-		sigdelset(&act.sa_mask, SIGSTOP);
-		sigdelset(&act.sa_mask, SIGKILL);
+		if (sigfillset(&act.sa_mask) ||
+		    sigdelset(&act.sa_mask, SIGILL) ||
+		    sigdelset(&act.sa_mask, SIGSEGV) ||
+		    sigdelset(&act.sa_mask, SIGBUS) ||
+		    sigdelset(&act.sa_mask, SIGSTOP) ||
+		    sigdelset(&act.sa_mask, SIGKILL)) {
+			ERROR("failed to set signal");
+			exit(EXIT_FAILURE);
+		}
+
 		act.sa_flags = 0;
 		act.sa_handler = interrupt_handler;
-		sigaction(i, &act, NULL);
+		if (sigaction(i, &act, NULL) && errno != EINVAL) {
+			SYSERROR("failed to sigaction");
+			exit(EXIT_FAILURE);
+		}
 	}
 
-	if (lxc_setup_fs())
-		exit(err);
-
-	if (lxc_caps_reset())
-		exit(err);
+	lxc_setup_fs();
 
 	pid = fork();
 
 	if (pid < 0)
-		exit(err);
+		exit(EXIT_FAILURE);
 
 	if (!pid) {
 
@@ -142,7 +176,10 @@ int main(int argc, char *argv[])
 		for (i = 1; i < NSIG; i++)
 			signal(i, SIG_DFL);
 
-		sigprocmask(SIG_SETMASK, &omask, NULL);
+		if (sigprocmask(SIG_SETMASK, &omask, NULL)) {
+			SYSERROR("failed to set signal mask");
+			exit(EXIT_FAILURE);
+		}
 
 		NOTICE("about to exec '%s'", aargv[0]);
 
@@ -152,17 +189,19 @@ int main(int argc, char *argv[])
 	}
 
 	/* let's process the signals now */
-	sigdelset(&omask, SIGALRM);
-	sigprocmask(SIG_SETMASK, &omask, NULL);
+	if (sigdelset(&omask, SIGALRM) ||
+	    sigprocmask(SIG_SETMASK, &omask, NULL)) {
+		SYSERROR("failed to set signal mask");
+		exit(EXIT_FAILURE);
+	}
 
 	/* no need of other inherited fds but stderr */
 	close(fileno(stdin));
 	close(fileno(stdout));
 
-	err = 0;
+	err = EXIT_SUCCESS;
 	for (;;) {
 		int status;
-		int orphan = 0;
 		pid_t waited_pid;
 
 		switch (was_interrupted) {
@@ -209,11 +248,13 @@ int main(int argc, char *argv[])
 		 * (not wrapped pid) and continue to wait for
 		 * the end of the orphan group.
 		 */
-		if ((waited_pid != pid) || (orphan ==1))
-			continue;
-		orphan = 1;
-		err = lxc_error_set_and_log(waited_pid, status);
+		if (waited_pid == pid && !have_status) {
+			err = lxc_error_set_and_log(waited_pid, status);
+			have_status = 1;
+		}
 	}
 out:
-	return err;
+	if (err < 0)
+		exit(EXIT_FAILURE);
+	exit(err);
 }

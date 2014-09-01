@@ -1,17 +1,16 @@
-#!/bin/sh
-
-set -e
-
-DEB_HOST_MULTIARCH="$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
-
-cat << EOF
 etc
+lib
 usr/bin
-usr/lib/${DEB_HOST_MULTIARCH}/lxc/*.so.*
-usr/lib/${DEB_HOST_MULTIARCH}/lxc/lxc-*
-usr/lib/${DEB_HOST_MULTIARCH}/lxc/README
+usr/lib/*/*.so.*
+usr/lib/*/lua
+usr/lib/*/lxc/lxc-*
+usr/lib/*/lxc/rootfs
+usr/lib/python*
+usr/sbin
 usr/share/doc
+usr/share/lua
 usr/share/lxc
 usr/share/man
 var
-EOF
+
+doc/api/html/*	/usr/share/doc/lxc/html

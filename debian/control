@@ -1,21 +1,41 @@
 Source: lxc
 Section: admin
 Priority: optional
-Maintainer: Daniel Baumann <daniel.baumann@progress-technologies.net>
-Uploaders: Jonas Genannt <jonas.genannt@capi2name.de>
+Maintainer: Daniel Baumann <mail@daniel-baumann.ch>
 Build-Depends:
- debhelper (>= 9), autotools-dev, docbook, docbook-utils, libcap-dev,
- linux-libc-dev
-Standards-Version: 3.9.3
-Homepage: http://lxc.sourceforge.net/
+ debhelper (>= 9),
+ dh-autoreconf,
+ dh-systemd,
+ doxygen,
+ autotools-dev,
+ docbook2x,
+ graphviz,
+ libapparmor-dev,
+ liblua5.2-dev,
+ libcap-dev,
+ libseccomp-dev [amd64 armhf i386],
+ libselinux-dev,
+ linux-libc-dev,
+ pkg-config,
+ python3-dev,
+Standards-Version: 3.9.5
+Homepage: http://linuxcontainers.org/
+Vcs-Browser: http://daniel-baumann.ch/gitweb/?p=debian/packages/lxc.git
+Vcs-Git: git://daniel-baumann.ch/git/debian/packages/lxc.git
 
 Package: lxc
 Architecture: linux-any
-Pre-Depends: ${multiarch:Pre-Depends}
-Depends: ${misc:Depends}, ${shlibs:Depends}
-Recommends: debootstrap | cdebootstrap, libcap2-bin
-Conflicts: cgroup-bin
-Suggests: lxctl
+Pre-Depends: multiarch-support
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ ${python3:Depends},
+Recommends:
+ lua5.2,
+ rsync,
+Suggests: debootstrap
+Conflicts: lxc-dev
+Replaces: lxc-dev
 Description: Linux Containers userspace tools
  Containers are insulated areas inside a system, which have their own namespace
  for filesystem, network, PID, IPC, CPU and memory allocation and which can be
@@ -31,7 +51,8 @@ Section: debug
 Priority: extra
 Architecture: linux-any
 Depends:
- ${misc:Depends}, lxc (= ${binary:Version}), lxc-dev (= ${binary:Version})
+ ${misc:Depends},
+ lxc (= ${binary:Version}),
 Description: Linux Containers userspace tools (debug)
  Containers are insulated areas inside a system, which have their own namespace
  for filesystem, network, PID, IPC, CPU and memory allocation and which can be
@@ -39,15 +60,3 @@ Description: Linux Containers userspace tools (debug)
  kernel.
  .
  This package contains the debugging symbols.
-
-Package: lxc-dev
-Section: libdevel
-Architecture: linux-any
-Depends: ${misc:Depends}, lxc (= ${binary:Version})
-Description: Linux Containers userspace tools (development)
- Containers are insulated areas inside a system, which have their own namespace
- for filesystem, network, PID, IPC, CPU and memory allocation and which can be
- created using the Control Group and Namespace features included in the Linux
- kernel.
- .
- This package contains the development files.
