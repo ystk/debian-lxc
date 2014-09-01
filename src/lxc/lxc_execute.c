@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,7 +18,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 #define _GNU_SOURCE
 #include <stdio.h>
@@ -39,8 +39,9 @@
 #include "arguments.h"
 #include "config.h"
 #include "start.h"
+#include "utils.h"
 
-lxc_log_define(lxc_execute_ui, lxc_execute);
+lxc_log_define(lxc_execute_ui, lxc);
 
 static struct lxc_list defines;
 
@@ -90,18 +91,20 @@ int main(int argc, char *argv[])
 {
 	char *rcfile;
 	struct lxc_conf *conf;
+	int ret;
 
 	lxc_list_init(&defines);
 
 	if (lxc_caps_init())
-		return -1;
+		return 1;
 
 	if (lxc_arguments_parse(&my_args, argc, argv))
-		return -1;
+		return 1;
 
-	if (lxc_log_init(my_args.log_file, my_args.log_priority,
-			 my_args.progname, my_args.quiet))
-		return -1;
+	if (lxc_log_init(my_args.name, my_args.log_file, my_args.log_priority,
+			 my_args.progname, my_args.quiet, my_args.lxcpath[0]))
+		return 1;
+	lxc_log_options_no_override();
 
 	/* rcfile is specified in the cli option */
 	if (my_args.rcfile)
@@ -109,10 +112,10 @@ int main(int argc, char *argv[])
 	else {
 		int rc;
 
-		rc = asprintf(&rcfile, LXCPATH "/%s/config", my_args.name);
+		rc = asprintf(&rcfile, "%s/%s/config", my_args.lxcpath[0], my_args.name);
 		if (rc == -1) {
 			SYSERROR("failed to allocate memory");
-			return -1;
+			return 1;
 		}
 
 		/* container configuration does not exist */
@@ -125,16 +128,22 @@ int main(int argc, char *argv[])
 	conf = lxc_conf_init();
 	if (!conf) {
 		ERROR("failed to initialize configuration");
-		return -1;
+		return 1;
 	}
 
 	if (rcfile && lxc_config_read(rcfile, conf)) {
 		ERROR("failed to read configuration file");
-		return -1;
+		return 1;
 	}
 
 	if (lxc_config_define_load(&defines, conf))
-		return -1;
+		return 1;
 
-	return lxc_execute(my_args.name, my_args.argv, my_args.quiet, conf);
+	ret = lxc_execute(my_args.name, my_args.argv, my_args.quiet, conf, my_args.lxcpath[0]);
+
+	lxc_conf_free(conf);
+
+	if (ret < 0)
+		return 1;
+	return ret;
 }

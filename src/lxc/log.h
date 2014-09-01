@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  * Cedric Le Goater <legoater@free.fr>
  *
  * This library is free software; you can redistribute it and/or
@@ -19,15 +19,19 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef _log_h
-#define _log_h
+#ifndef __LXC_LOG_H
+#define __LXC_LOG_H
+
+#include "config.h"
 
 #include <stdarg.h>
 #include <stdio.h>
 #include <sys/time.h>
 #include <string.h>
+#include <strings.h>
+#include <stdbool.h>
 
 #ifndef O_CLOEXEC
 #define O_CLOEXEC 02000000
@@ -40,8 +44,15 @@
 #define LXC_LOG_PREFIX_SIZE	32
 #define LXC_LOG_BUFFER_SIZE	512
 
+/* This attribute is required to silence clang warnings */
+#if defined(__GNUC__)
+#define ATTR_UNUSED __attribute__ ((unused))
+#else
+#define ATTR_UNUSED
+#endif
+
 /* predefined priorities. */
-enum {
+enum lxc_loglevel {
 	LXC_LOG_PRIORITY_TRACE,
 	LXC_LOG_PRIORITY_DEBUG,
 	LXC_LOG_PRIORITY_INFO,
@@ -172,14 +183,14 @@ __lxc_log(const struct lxc_log_category* category,
 }
 
 /*
- * Helper macro to define log fonctions.
+ * Helper macro to define log functions.
  */
 #define lxc_log_priority_define(acategory, PRIORITY)			\
 									\
-static inline void LXC_##PRIORITY(struct lxc_log_locinfo *,		\
+ATTR_UNUSED static inline void LXC_##PRIORITY(struct lxc_log_locinfo *,		\
 	const char *, ...) __attribute__ ((format (printf, 2, 3)));	\
 									\
-static inline void LXC_##PRIORITY(struct lxc_log_locinfo* locinfo,	\
+ATTR_UNUSED static inline void LXC_##PRIORITY(struct lxc_log_locinfo* locinfo,	\
 				  const char* format, ...)		\
 {									\
 	if (lxc_log_priority_is_enabled(acategory, 			\
@@ -232,8 +243,6 @@ static inline void LXC_##PRIORITY(struct lxc_log_locinfo* locinfo,	\
 /*
  * top categories
  */
-extern struct lxc_log_category lxc_log_category_lxc;
-
 #define TRACE(format, ...) do {						\
 	struct lxc_log_locinfo locinfo = LXC_LOG_LOCINFO_INIT;		\
 	LXC_TRACE(&locinfo, format, ##__VA_ARGS__);			\
@@ -285,10 +294,22 @@ extern struct lxc_log_category lxc_log_category_lxc;
 	ERROR("%s - " format, strerror(errno), ##__VA_ARGS__);		\
 } while (0)
 
+#ifdef HAVE_TLS
+extern __thread int lxc_log_fd;
+#else
 extern int lxc_log_fd;
+#endif
 
-extern int lxc_log_init(const char *file, const char *priority,
-			const char *prefix, int quiet);
+extern int lxc_log_init(const char *name, const char *file,
+			const char *priority, const char *prefix, int quiet,
+			const char *lxcpath);
 
-extern void lxc_log_setprefix(const char *a_prefix);
+extern int lxc_log_set_file(const char *fname);
+extern int lxc_log_set_level(int level);
+extern void lxc_log_set_prefix(const char *prefix);
+extern const char *lxc_log_get_file(void);
+extern int lxc_log_get_level(void);
+extern bool lxc_log_has_valid_level(void);
+extern const char *lxc_log_get_prefix(void);
+extern void lxc_log_options_no_override();
 #endif

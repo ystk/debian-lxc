@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,7 +18,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 #include <sys/socket.h>
 #include <string.h>
@@ -48,7 +48,7 @@ extern void *nlmsg_data(struct nlmsg *nlmsg)
 	return data;
 }
 
-static int nla_put(struct nlmsg *nlmsg, int attr, 
+static int nla_put(struct nlmsg *nlmsg, int attr,
 		   const void *data, size_t len)
 {
 	struct rtattr *rta;
@@ -63,7 +63,7 @@ static int nla_put(struct nlmsg *nlmsg, int attr,
 	return 0;
 }
 
-extern int nla_put_buffer(struct nlmsg *nlmsg, int attr, 
+extern int nla_put_buffer(struct nlmsg *nlmsg, int attr,
 			  const void *data, size_t size)
 {
 	return nla_put(nlmsg, attr, data, size);
@@ -79,7 +79,7 @@ extern int nla_put_u32(struct nlmsg *nlmsg, int attr, int value)
 	return nla_put(nlmsg, attr, &value, sizeof(value));
 }
 
-extern int nla_put_u16(struct nlmsg *nlmsg, int attr, ushort value)
+extern int nla_put_u16(struct nlmsg *nlmsg, int attr, unsigned short value)
 {
 	return nla_put(nlmsg, attr, &value, 2);
 }
@@ -193,7 +193,7 @@ extern int netlink_send(struct nl_handler *handler, struct nlmsg *nlmsg)
 #ifndef NLMSG_ERROR
 #define NLMSG_ERROR                0x2
 #endif
-extern int netlink_transaction(struct nl_handler *handler, 
+extern int netlink_transaction(struct nl_handler *handler,
 			       struct nlmsg *request, struct nlmsg *answer)
 {
 	int ret;
@@ -226,11 +226,11 @@ extern int netlink_open(struct nl_handler *handler, int protocol)
         if (handler->fd < 0)
                 return -errno;
 
-        if (setsockopt(handler->fd, SOL_SOCKET, SO_SNDBUF, 
+        if (setsockopt(handler->fd, SOL_SOCKET, SO_SNDBUF,
 		       &sndbuf, sizeof(sndbuf)) < 0)
                 return -errno;
 
-        if (setsockopt(handler->fd, SOL_SOCKET, SO_RCVBUF, 
+        if (setsockopt(handler->fd, SOL_SOCKET, SO_RCVBUF,
 		       &rcvbuf,sizeof(rcvbuf)) < 0)
                 return -errno;
 
@@ -238,12 +238,12 @@ extern int netlink_open(struct nl_handler *handler, int protocol)
         handler->local.nl_family = AF_NETLINK;
         handler->local.nl_groups = 0;
 
-        if (bind(handler->fd, (struct sockaddr*)&handler->local, 
+        if (bind(handler->fd, (struct sockaddr*)&handler->local,
 		 sizeof(handler->local)) < 0)
                 return -errno;
 
         socklen = sizeof(handler->local);
-        if (getsockname(handler->fd, (struct sockaddr*)&handler->local, 
+        if (getsockname(handler->fd, (struct sockaddr*)&handler->local,
 			&socklen) < 0)
                 return -errno;
 

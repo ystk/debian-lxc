@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,17 +18,28 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _confile_h
-#define _confile_h
+#ifndef __LXC_CONFILE_H
+#define __LXC_CONFILE_H
+
+#include <stdio.h>
+#include <lxc/attach_options.h>
 
 struct lxc_conf;
 struct lxc_list;
 
+typedef int (*config_cb)(const char *, const char *, struct lxc_conf *);
+struct lxc_config_t {
+	char *name;
+	config_cb cb;
+};
+
+extern struct lxc_config_t *lxc_getconfig(const char *key);
+extern int lxc_list_nicconfigs(struct lxc_conf *c, const char *key, char *retv, int inlen);
+extern int lxc_listconfigs(char *retv, int inlen);
 extern int lxc_config_read(const char *file, struct lxc_conf *conf);
-extern int lxc_config_readline(char *buffer, struct lxc_conf *conf);
 
 extern int lxc_config_define_add(struct lxc_list *defines, char* arg);
 extern int lxc_config_define_load(struct lxc_list *defines,
@@ -36,5 +47,9 @@ extern int lxc_config_define_load(struct lxc_list *defines,
 
 /* needed for lxc-attach */
 extern signed long lxc_config_parse_arch(const char *arch);
+extern int lxc_fill_elevated_privileges(char *flaglist, int *flags);
 
+extern int lxc_get_config_item(struct lxc_conf *c, const char *key, char *retv, int inlen);
+extern int lxc_clear_config_item(struct lxc_conf *c, const char *key);
+extern void write_config(FILE *fout, struct lxc_conf *c);
 #endif

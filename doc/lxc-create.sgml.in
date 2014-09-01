@@ -1,11 +1,11 @@
-<!-- 
+<!--
 
 lxc: linux Container library
 
 (C) Copyright IBM Corp. 2007, 2008
 
 Authors:
-Daniel Lezcano <dlezcano at fr.ibm.com>
+Daniel Lezcano <daniel.lezcano at free.fr>
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
@@ -19,11 +19,11 @@ Lesser General Public License for more details.
 
 You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 -->
 
-<!DOCTYPE refentry PUBLIC "-//Davenport//DTD DocBook V3.0//EN" [
+<!DOCTYPE refentry PUBLIC @docdtd@ [
 
 <!ENTITY commonoptions SYSTEM "@builddir@/common_options.sgml">
 <!ENTITY seealso SYSTEM "@builddir@/see_also.sgml">
@@ -48,9 +48,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
   <refsynopsisdiv>
     <cmdsynopsis>
-      <command>lxc-create <replaceable>-n name</replaceable>
-       <optional>-f config_file</optional>
-       <optional>-t template</optional></command>
+      <command>lxc-create</command>
+      <arg choice="req">-n <replaceable>name</replaceable></arg>
+      <arg choice="opt">-f <replaceable>config_file</replaceable></arg>
+      <arg choice="opt">-t <replaceable>template</replaceable></arg>
+      <arg choice="opt">-B <replaceable>backingstore</replaceable></arg>
+      <arg choice="opt">-- <replaceable>template-options</replaceable></arg>
     </cmdsynopsis>
   </refsynopsisdiv>
 
@@ -59,7 +62,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
     <para>
       <command>lxc-create</command> creates a system object where is
-      stored the configuration informations and where can be stored
+      stored the configuration information and where can be stored
       user information. The identifier <replaceable>name</replaceable>
       is used to specify the container to be used with the different
       lxc commands.
@@ -72,7 +75,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
     <para>
       The object is the definition of the different resources an
       application can use or can see. The more the configuration file
-      contains informations, the more the container is isolated and
+      contains information, the more the container is isolated and
       the more the application is jailed.
     </para>
 
@@ -110,6 +113,63 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 	    eg. busybox, debian, fedora, ubuntu or sshd.
 	    Refer to the examples in <filename>@LXCTEMPLATEDIR@</filename>
 	    for details of the expected script structure.
+	    Alternatively, the full path to an executable template script
+	    can also be passed as a parameter.
+	  </para>
+	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term>
+	  <option>-B <replaceable>backingstore</replaceable></option>
+	</term>
+	<listitem>
+	  <para>
+	    'backingstore' is one of 'dir', 'lvm', 'loop', 'btrfs', or 'best'.  The
+	    default is 'dir', meaning that the container root filesystem
+	    will be a directory under <filename>@LXCPATH@/container/rootfs</filename>.
+	    This backing store type allows the optional
+	    <replaceable>--dir ROOTFS</replaceable> to be specified, meaning
+	    that the container rootfs should be placed under the specified path,
+	    rather than the default.  (The 'none' backingstore type is an alias for
+	    'dir'.)  If 'btrfs' is specified, then the
+	    target filesystem must be btrfs, and the container rootfs will be
+	    created as a new subvolume.  This allows snapshotted clones to be
+	    created, but also causes rsync --one-filesystem to treat it as a
+	    separate filesystem.
+	    If backingstore is 'lvm', then an lvm block device will be
+	    used and the following further options are available:
+	    <replaceable>--lvname lvname1</replaceable> will create an LV
+	    named <filename>lvname1</filename> rather than the default, which
+	    is the container name.  <replaceable>--vgname vgname1</replaceable>
+	    will create the LV in volume group <filename>vgname1</filename>
+	    rather than the default, <filename>lxc</filename>.
+	    <replaceable>--thinpool thinpool1</replaceable> will create the
+	    LV as a thin-provisioned volume in the pool named
+	    <filename>thinpool1</filename> rather than the
+	    default, <filename>lxc</filename>.
+	    <replaceable>--fstype FSTYPE</replaceable> will create an FSTYPE
+	    filesystem on the LV, rather than the default, which is ext4.
+	    <replaceable>--fssize SIZE</replaceable> will create a LV (and
+	    filesystem) of size SIZE rather than the default, which is 1G.
+	  </para>
+	  <para>
+	    If backingstore is 'best', then lxc will try, in order, btrfs,
+	    zfs, lvm, and finally a directory backing store.
+	  </para>
+	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term>
+	  <option>-- <replaceable>template-options</replaceable></option>
+	</term>
+	<listitem>
+	  <para>
+	    This will pass <replaceable>template-options</replaceable> to the
+	    template as arguments.  To see the list of options supported by
+	    the template, you can run
+	    <command>lxc-create -t TEMPLATE -h</command>.
 	  </para>
 	</listitem>
       </varlistentry>
@@ -117,6 +177,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
     </variablelist>
 
   </refsect1>
+
+  &commonoptions;
 
   <refsect1>
     <title>Diagnostic</title>
@@ -129,11 +191,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
           <para>
 	    As the message mention it, you try to create a container
 	    but there is a container with the same name. You can use
-	    the <command>lxc-ls -l</command> command to list the
+	    the <command>lxc-ls</command> command to list the
 	    available containers on the system.
           </para>
         </listitem>
-      </varlistentry>    
+      </varlistentry>
 
     </variablelist>
 

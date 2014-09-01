@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,7 +18,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 #include <string.h>
 #include <stdio.h>
@@ -60,45 +60,46 @@ static int genetlink_resolve_family(const char *family)
 
 	ret = netlink_open(&handler, NETLINK_GENERIC);
 	if (ret)
-		return ret;
+		goto out;
 
-	ret = nla_put_string((struct nlmsg *)&request->nlmsghdr, 
+	ret = nla_put_string((struct nlmsg *)&request->nlmsghdr,
 			     CTRL_ATTR_FAMILY_NAME, family);
 	if (ret)
-		goto out;
+		goto out_close;
 
 	ret = netlink_transaction(&handler, (struct nlmsg *)&request->nlmsghdr,
 				  (struct nlmsg *)&reply->nlmsghdr);
 	if (ret < 0)
-		goto out;
+		goto out_close;
 
 	genlmsghdr = NLMSG_DATA(&reply->nlmsghdr);
 	len = reply->nlmsghdr.nlmsg_len;
 
 	ret = -ENOMSG;
 	if (reply->nlmsghdr.nlmsg_type !=  GENL_ID_CTRL)
-		goto out;
+		goto out_close;
 
 	if (genlmsghdr->cmd != CTRL_CMD_NEWFAMILY)
-		goto out;
+		goto out_close;
 
 	ret = -EMSGSIZE;
 	len -= NLMSG_LENGTH(GENL_HDRLEN);
 	if (len < 0)
-		goto out;
+		goto out_close;
 	
 	attr = (struct nlattr *)GENLMSG_DATA(reply);
 	attr = (struct nlattr *)((char *)attr + NLA_ALIGN(attr->nla_len));
 	
 	ret = -ENOMSG;
 	if (attr->nla_type != CTRL_ATTR_FAMILY_ID)
-		goto out;
+		goto out_close;
 
 	ret =  *(__u16 *) NLA_DATA(attr);
+out_close:
+	netlink_close(&handler);
 out:
 	genlmsg_free(request);
 	genlmsg_free(reply);
-	netlink_close(&handler);
 	return ret;
 }
 
@@ -130,7 +131,7 @@ extern int genetlink_send(struct genl_handler *handler, struct genlmsg *genlmsg)
 	return netlink_send(&handler->nlh, (struct nlmsg *)&genlmsg->nlmsghdr);
 }
 
-extern int genetlink_transaction(struct genl_handler *handler, 
+extern int genetlink_transaction(struct genl_handler *handler,
 			  struct genlmsg *request, struct genlmsg *answer)
 {
 	return netlink_transaction(&handler->nlh, (struct nlmsg *)&request->nlmsghdr,

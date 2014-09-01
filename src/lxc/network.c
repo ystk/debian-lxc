@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,7 +18,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 #define _GNU_SOURCE
 #include <stdio.h>
@@ -30,6 +30,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -43,10 +44,16 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <linux/sockios.h>
-#include <linux/if_bridge.h>
 
 #include "nl.h"
 #include "network.h"
+#include "conf.h"
+
+#if HAVE_IFADDRS_H
+#include <ifaddrs.h>
+#else
+#include <../include/ifaddrs.h>
+#endif
 
 #ifndef IFLA_LINKMODE
 #  define IFLA_LINKMODE 17
@@ -126,6 +133,18 @@ out:
 	netlink_close(&nlh);
 	nlmsg_free(nlmsg);
 	return err;
+}
+
+int lxc_netdev_move_by_name(char *ifname, pid_t pid)
+{
+	int index;
+
+	if (!ifname)
+		return -EINVAL;
+
+	index = if_nametoindex(ifname);
+
+	return lxc_netdev_move_by_index(index, pid);
 }
 
 int lxc_netdev_delete_by_index(int ifindex)
@@ -231,7 +250,7 @@ int lxc_netdev_rename_by_name(const char *oldname, const char *newname)
 	return lxc_netdev_rename_by_index(index, newname);
 }
 
-static int netdev_set_flag(const char *name, int flag)
+int netdev_set_flag(const char *name, int flag)
 {
 	struct nl_handler nlh;
 	struct nlmsg *nlmsg = NULL, *answer = NULL;
@@ -275,6 +294,116 @@ out:
 	netlink_close(&nlh);
 	nlmsg_free(nlmsg);
 	nlmsg_free(answer);
+	return err;
+}
+
+int netdev_get_mtu(int ifindex)
+{
+	struct nl_handler nlh;
+	struct nlmsg *nlmsg = NULL, *answer = NULL;
+	struct ip_req *ip_req;
+	struct nlmsghdr *msg;
+	int err, res;
+	int recv_len = 0, answer_len;
+	int readmore = 0;
+
+	err = netlink_open(&nlh, NETLINK_ROUTE);
+	if (err)
+		return err;
+
+	err = -ENOMEM;
+	nlmsg = nlmsg_alloc(NLMSG_GOOD_SIZE);
+	if (!nlmsg)
+		goto out;
+
+	answer = nlmsg_alloc(NLMSG_GOOD_SIZE);
+	if (!answer)
+		goto out;
+
+	/* Save the answer buffer length, since it will be overwritten
+	 * on the first receive (and we might need to receive more than
+	 * once. */
+	answer_len = answer->nlmsghdr.nlmsg_len;
+
+	ip_req = (struct ip_req *)nlmsg;
+	ip_req->nlmsg.nlmsghdr.nlmsg_len =
+		NLMSG_LENGTH(sizeof(struct ifaddrmsg));
+	ip_req->nlmsg.nlmsghdr.nlmsg_flags = NLM_F_REQUEST|NLM_F_DUMP;
+	ip_req->nlmsg.nlmsghdr.nlmsg_type = RTM_GETLINK;
+	ip_req->ifa.ifa_family = AF_UNSPEC;
+
+	/* Send the request for addresses, which returns all addresses
+	 * on all interfaces. */
+	err = netlink_send(&nlh, nlmsg);
+	if (err < 0)
+		goto out;
+
+	do {
+		/* Restore the answer buffer length, it might have been
+		 * overwritten by a previous receive. */
+		answer->nlmsghdr.nlmsg_len = answer_len;
+
+		/* Get the (next) batch of reply messages */
+		err = netlink_rcv(&nlh, answer);
+		if (err < 0)
+			goto out;
+
+		recv_len = err;
+		err = 0;
+
+		/* Satisfy the typing for the netlink macros */
+		msg = &answer->nlmsghdr;
+
+		while (NLMSG_OK(msg, recv_len)) {
+
+			/* Stop reading if we see an error message */
+			if (msg->nlmsg_type == NLMSG_ERROR) {
+				struct nlmsgerr *errmsg = (struct nlmsgerr*)NLMSG_DATA(msg);
+				err = errmsg->error;
+				goto out;
+			}
+
+			/* Stop reading if we see a NLMSG_DONE message */
+			if (msg->nlmsg_type == NLMSG_DONE) {
+				readmore = 0;
+				break;
+			}
+
+			struct ifinfomsg *ifi = NLMSG_DATA(msg);
+			if (ifi->ifi_index == ifindex) {
+				struct rtattr *rta = IFLA_RTA(ifi);
+				int attr_len = msg->nlmsg_len - NLMSG_LENGTH(sizeof(*ifi));
+				res = 0;
+				while(RTA_OK(rta, attr_len)) {
+					/* Found a local address for the requested interface,
+					 * return it. */
+					if (rta->rta_type == IFLA_MTU) {
+						memcpy(&res, RTA_DATA(rta), sizeof(int));
+						err = res;
+						goto out;
+					}
+					rta = RTA_NEXT(rta, attr_len);
+				}
+
+			}
+
+			/* Keep reading more data from the socket if the
+			 * last message had the NLF_F_MULTI flag set */
+			readmore = (msg->nlmsg_flags & NLM_F_MULTI);
+
+			/* Look at the next message received in this buffer */
+			msg = NLMSG_NEXT(msg, recv_len);
+		}
+	} while (readmore);
+
+	/* If we end up here, we didn't find any result, so signal an
+	 * error */
+	err = -1;
+
+out:
+	netlink_close(&nlh);
+	nlmsg_free(answer);
+	nlmsg_free(nlmsg);
 	return err;
 }
 
@@ -412,7 +541,7 @@ out:
 }
 
 /* XXX: merge with lxc_macvlan_create */
-int lxc_vlan_create(const char *master, const char *name, ushort vlanid)
+int lxc_vlan_create(const char *master, const char *name, unsigned short vlanid)
 {
 	struct nl_handler nlh;
 	struct nlmsg *nlmsg = NULL, *answer = NULL;
@@ -582,12 +711,15 @@ static int proc_sys_net_write(const char *path, const char *value)
 static int ip_forward_set(const char *ifname, int family, int flag)
 {
 	char path[MAXPATHLEN];
+	int rc;
 
 	if (family != AF_INET && family != AF_INET6)
 		return -EINVAL;
 
-	snprintf(path, MAXPATHLEN, "/proc/sys/net/%s/conf/%s/forwarding",
+	rc = snprintf(path, MAXPATHLEN, "/proc/sys/net/%s/conf/%s/forwarding",
 		 family == AF_INET?"ipv4":"ipv6" , ifname);
+	if (rc >= MAXPATHLEN)
+		return -E2BIG;
 
 	return proc_sys_net_write(path, flag?"1":"0");
 }
@@ -605,13 +737,16 @@ int lxc_ip_forward_off(const char *ifname, int family)
 static int neigh_proxy_set(const char *ifname, int family, int flag)
 {
 	char path[MAXPATHLEN];
+	int ret;
 
 	if (family != AF_INET && family != AF_INET6)
 		return -EINVAL;
 
-	sprintf(path, "/proc/sys/net/%s/conf/%s/%s",
+	ret = snprintf(path, MAXPATHLEN, "/proc/sys/net/%s/conf/%s/%s",
 		family == AF_INET?"ipv4":"ipv6" , ifname,
 		family == AF_INET?"proxy_arp":"proxy_ndp");
+	if (ret < 0 || ret >= MAXPATHLEN)
+		return -E2BIG;
 
 	return proc_sys_net_write(path, flag?"1":"0");
 }
@@ -776,8 +911,11 @@ static int ifa_get_local_ip(int family, struct ip_req *ip_info, void** res) {
 
 			/* We might have found an IFA_ADDRESS before,
 			 * which we now overwrite with an IFA_LOCAL. */
-			if (!*res)
+			if (!*res) {
 				*res = malloc(addrlen);
+				if (!*res)
+					return -1;
+			}
 
 			memcpy(*res, RTA_DATA(rta), addrlen);
 
@@ -829,7 +967,6 @@ static int ip_addr_get(int family, int ifindex, void **res)
 	err = netlink_send(&nlh, nlmsg);
 	if (err < 0)
 		goto out;
-	err = 0;
 
 	do {
 		/* Restore the answer buffer length, it might have been
@@ -868,7 +1005,11 @@ static int ip_addr_get(int family, int ifindex, void **res)
 
 			ip_info = (struct ip_req *)msg;
 			if (ip_info->ifa.ifa_index == ifindex) {
-				ifa_get_local_ip(family, ip_info, res);
+				if (ifa_get_local_ip(family, ip_info, res) < 0) {
+					err = -1;
+					goto out;
+				}
+
 				/* Found a result, stop searching */
 				if (*res)
 					goto out;
@@ -969,6 +1110,66 @@ int lxc_ipv6_gateway_add(int ifindex, struct in6_addr *gw)
 	return ip_gateway_add(AF_INET6, ifindex, gw);
 }
 
+static int ip_route_dest_add(int family, int ifindex, void *dest)
+{
+	struct nl_handler nlh;
+	struct nlmsg *nlmsg = NULL, *answer = NULL;
+	struct rt_req *rt_req;
+	int addrlen;
+	int err;
+	
+	addrlen = family == AF_INET ? sizeof(struct in_addr) :
+		sizeof(struct in6_addr);
+	
+	err = netlink_open(&nlh, NETLINK_ROUTE);
+	if (err)
+		return err;
+	
+	err = -ENOMEM;
+	nlmsg = nlmsg_alloc(NLMSG_GOOD_SIZE);
+	if (!nlmsg)
+		goto out;
+	
+	answer = nlmsg_alloc(NLMSG_GOOD_SIZE);
+	if (!answer)
+		goto out;
+	
+	rt_req = (struct rt_req *)nlmsg;
+	rt_req->nlmsg.nlmsghdr.nlmsg_len =
+		NLMSG_LENGTH(sizeof(struct rtmsg));
+	rt_req->nlmsg.nlmsghdr.nlmsg_flags =
+		NLM_F_ACK|NLM_F_REQUEST|NLM_F_CREATE|NLM_F_EXCL;
+	rt_req->nlmsg.nlmsghdr.nlmsg_type = RTM_NEWROUTE;
+	rt_req->rt.rtm_family = family;
+	rt_req->rt.rtm_table = RT_TABLE_MAIN;
+	rt_req->rt.rtm_scope = RT_SCOPE_LINK;
+	rt_req->rt.rtm_protocol = RTPROT_BOOT;
+	rt_req->rt.rtm_type = RTN_UNICAST;
+	rt_req->rt.rtm_dst_len = addrlen*8;
+	
+	err = -EINVAL;
+	if (nla_put_buffer(nlmsg, RTA_DST, dest, addrlen))
+		goto out;
+	if (nla_put_u32(nlmsg, RTA_OIF, ifindex))
+		goto out;
+	err = netlink_transaction(&nlh, nlmsg, answer);
+out:
+	netlink_close(&nlh);
+	nlmsg_free(answer);
+	nlmsg_free(nlmsg);
+	return err;
+}
+
+int lxc_ipv4_dest_add(int ifindex, struct in_addr *dest)
+{
+	return ip_route_dest_add(AF_INET, ifindex, dest);
+}
+
+int lxc_ipv6_dest_add(int ifindex, struct in6_addr *dest)
+{
+	return ip_route_dest_add(AF_INET6, ifindex, dest);
+}
+
 /*
  * There is a lxc_bridge_attach, but no need of a bridge detach
  * as automatically done by kernel when a netdev is deleted.
@@ -989,7 +1190,8 @@ int lxc_bridge_attach(const char *bridge, const char *ifname)
 	if (fd < 0)
 		return -errno;
 
-	strncpy(ifr.ifr_name, bridge, IFNAMSIZ);
+	strncpy(ifr.ifr_name, bridge, IFNAMSIZ-1);
+	ifr.ifr_name[IFNAMSIZ-1] = '\0';
 	ifr.ifr_ifindex = index;
 	err = ioctl(fd, SIOCBRADDIF, &ifr);
 	close(fd);
@@ -997,4 +1199,110 @@ int lxc_bridge_attach(const char *bridge, const char *ifname)
 		err = -errno;
 
 	return err;
+}
+
+static const char* const lxc_network_types[LXC_NET_MAXCONFTYPE + 1] = {
+	[LXC_NET_EMPTY]   = "empty",
+	[LXC_NET_VETH]    = "veth",
+	[LXC_NET_MACVLAN] = "macvlan",
+	[LXC_NET_PHYS]    = "phys",
+	[LXC_NET_VLAN]    = "vlan",
+	[LXC_NET_NONE]    = "none",
+};
+
+const char *lxc_net_type_to_str(int type)
+{
+	if (type < 0 || type > LXC_NET_MAXCONFTYPE)
+		return NULL;
+	return lxc_network_types[type];
+}
+
+static const char padchar[] =
+"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+char *lxc_mkifname(char *template)
+{
+	char *name = NULL;
+	int i = 0;
+	FILE *urandom;
+	unsigned int seed;
+	struct ifaddrs *ifaddr, *ifa;
+	int ifexists = 0;
+
+	/* Get all the network interfaces */
+	getifaddrs(&ifaddr);
+
+	/* Initialize the random number generator */
+	urandom = fopen ("/dev/urandom", "r");
+	if (urandom != NULL) {
+		if (fread (&seed, sizeof(seed), 1, urandom) <= 0)
+			seed = time(0);
+		fclose(urandom);
+	}
+	else
+		seed = time(0);
+
+#ifndef HAVE_RAND_R
+	srand(seed);
+#endif
+
+	/* Generate random names until we find one that doesn't exist */
+	while(1) {
+		ifexists = 0;
+		name = strdup(template);
+
+		if (name == NULL)
+			return NULL;
+
+		for (i = 0; i < strlen(name); i++) {
+			if (name[i] == 'X') {
+#ifdef HAVE_RAND_R
+				name[i] = padchar[rand_r(&seed) % (strlen(padchar) - 1)];
+#else
+				name[i] = padchar[rand() % (strlen(padchar) - 1)];
+#endif
+			}
+		}
+
+		for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+			if (strcmp(ifa->ifa_name, name) == 0) {
+				ifexists = 1;
+				break;
+			}
+		}
+
+		if (ifexists == 0)
+			break;
+
+		free(name);
+	}
+
+	freeifaddrs(ifaddr);
+	return name;
+}
+
+int setup_private_host_hw_addr(char *veth1)
+{
+	struct ifreq ifr;
+	int err;
+	int sockfd;
+
+	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (sockfd < 0)
+		return -errno;
+
+	snprintf((char *)ifr.ifr_name, IFNAMSIZ, "%s", veth1);
+	err = ioctl(sockfd, SIOCGIFHWADDR, &ifr);
+	if (err < 0) {
+		close(sockfd);
+		return -errno;
+	}
+
+	ifr.ifr_hwaddr.sa_data[0] = 0xfe;
+	err = ioctl(sockfd, SIOCSIFHWADDR, &ifr);
+	close(sockfd);
+	if (err < 0)
+		return -errno;
+
+	return 0;
 }

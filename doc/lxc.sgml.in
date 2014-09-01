@@ -1,11 +1,11 @@
-<!-- 
+<!--
 
 lxc: linux Container library
 
 (C) Copyright IBM Corp. 2007, 2008
 
 Authors:
-Daniel Lezcano <dlezcano at fr.ibm.com>
+Daniel Lezcano <daniel.lezcano at free.fr>
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
@@ -19,11 +19,11 @@ Lesser General Public License for more details.
 
 You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 -->
 
-<!DOCTYPE refentry PUBLIC "-//Davenport//DTD DocBook V3.0//EN" [
+<!DOCTYPE refentry PUBLIC @docdtd@ [
 
 <!ENTITY seealso SYSTEM "@builddir@/see_also.sgml">
 ]>
@@ -96,7 +96,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
       provided by the kernel which needs to be active. Depending of
       the missing functionalities the <command>lxc</command> will
       work with a restricted number of functionalities or will simply
-      fails.
+      fail.
     </para>
 
     <para>
@@ -239,7 +239,7 @@ rootfs
 	/sbin /home/root/sshd/rootfs/sbin none ro,bind 0 0
       </programlisting>
     </para>
-    
+
     <para>How to run a system in a container ?</para>
 
     <para>Running a system inside a container is paradoxically easier
@@ -249,7 +249,7 @@ rootfs
     without configuration because the container will set them
     up. eg. the ipv4 address will be setup by the system container
     init scripts. Here is an example of the mount points file:
-      
+
       <programlisting>
 	[root@lxc debian]$ cat fstab
 
@@ -280,7 +280,7 @@ rootfs
       </para>
 
       <programlisting>
-
+<![CDATA[
    ---------
   | STOPPED |<---------------
    ---------                 |
@@ -305,14 +305,14 @@ rootfs
    ----------                |
        |                     |
         ---------------------
-
+]]>
       </programlisting>
     </refsect2>
 
     <refsect2>
       <title>Configuration</title>
       <para>The container is configured through a configuration
-      file, the format of the configuration file is described in 
+      file, the format of the configuration file is described in
       <citerefentry>
 	<refentrytitle><filename>lxc.conf</filename></refentrytitle>
 	<manvolnum>5</manvolnum>
@@ -363,7 +363,7 @@ rootfs
       but if needed the <command>lxc-stop</command> command can
       be used to kill the still running application.
       </para>
-      
+
       <para>
 	Running an application inside a container is not exactly the
 	same thing as running a system. For this reason, there are two
@@ -380,7 +380,7 @@ rootfs
 	process, <command>lxc-init</command>.
 	This lxc-init after launching  the specified command,
 	will wait for its end and all other reparented processes.
-        (that allows to support daemons in the container).
+        (to support daemons in the container).
 	In other words, in the
 	container, <command>lxc-init</command> has the pid 1 and the
 	first process of the application has the pid 2.
@@ -434,7 +434,7 @@ rootfs
 	  lxc-freeze -n foo
 	</programlisting>
 
-	will put all the processes in an uninteruptible state and 
+	will put all the processes in an uninteruptible state and
 
 	<programlisting>
 	  lxc-unfreeze -n foo
@@ -454,45 +454,20 @@ rootfs
       <para>When there are a lot of containers, it is hard to follow
       what has been created or destroyed, what is running or what are
       the pids running into a specific container. For this reason, the
-      following commands may be usefull:
+      following commands may be useful:
 	<programlisting>
 	  lxc-ls
-	  lxc-ps --name foo
 	  lxc-info -n foo
 	</programlisting>
       </para>
       <para>
 	<command>lxc-ls</command> lists the containers of the
-	system. The command is a script built on top
-	of <command>ls</command>, so it accepts the options of the ls
-	commands, eg:
-	<programlisting>
-	  lxc-ls -C1
-	</programlisting>
-	will display the containers list in one column or:
-	<programlisting>
-	  lxc-ls -l
-	</programlisting>
-	will display the containers list and their permissions.
+	system.
       </para>
 
       <para>
-	<command>lxc-ps</command> will display the pids for a specific
-	container. Like <command>lxc-ls</command>, <command>lxc-ps</command>
-	is built on top of <command>ps</command> and accepts the same
-	options, eg:
-	<programlisting>lxc-ps --name foo --forest</programlisting>
-	will display the processes hierarchy for the processes
-	belonging the 'foo' container.
-
-	<programlisting>lxc-ps --lxc</programlisting>
-	will display all the containers and their processes.
-      </para>
-
-      <para>
-	<command>lxc-info</command> gives informations for a specific
-	container, at present time, only the state of the container is
-	displayed.
+	<command>lxc-info</command> gives information for a specific
+	container.
       </para>
 
       <para>
@@ -504,29 +479,6 @@ rootfs
 	  done
 	</programlisting>
 
-	And displaying all the pids of all the containers:
-
-	<programlisting>
-	  for i in $(lxc-ls -1); do
-	    lxc-ps --name $i --forest
-	  done
-	</programlisting>
-
-      </para>
-
-      <para>
-	<command>lxc-netstat</command> display network information for
-	a specific container. This command is built on top of
-	the <command>netstat</command> command and will accept its
-	options
-      </para>
-
-      <para>
-	The following command will display the socket informations for
-	the container 'foo'.
-	<programlisting>
-	  lxc-netstat -n foo -tano
-	</programlisting>
       </para>
 
     </refsect2>
@@ -570,7 +522,7 @@ rootfs
 	to the background.
 
 	<programlisting>
-
+<![CDATA[
 	  # launch lxc-wait in background
 	  lxc-wait -n foo -s STOPPED &
 	  LXC_WAIT_PID=$!
@@ -583,7 +535,7 @@ rootfs
 	  # is STOPPED
 	  wait $LXC_WAIT_PID
 	  echo "'foo' is finished"
-
+]]>
 	</programlisting>
       </para>
     </refsect2>

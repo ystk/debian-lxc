@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,15 +18,19 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
 
+#include "conf.h"
 #include "log.h"
 #include "start.h"
+#include "utils.h"
 
 lxc_log_define(lxc_execute, lxc_start);
 
@@ -35,22 +39,119 @@ struct execute_args {
 	int quiet;
 };
 
+/* historically lxc-init has been under /usr/lib/lxc and under
+ * /usr/lib/$ARCH/lxc.  It now lives as $prefix/sbin/init.lxc.
+ */
+static char *choose_init(void)
+{
+	char *retv = NULL;
+	int ret, env_set = 0;
+	struct stat mystat;
+
+	if (!getenv("PATH")) {
+		if (setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 0))
+			SYSERROR("Failed to setenv");
+		env_set = 1;
+	}
+
+	retv = on_path("init.lxc");
+
+	if (env_set) {
+		if (unsetenv("PATH"))
+			SYSERROR("Failed to unsetenv");
+	}
+
+	if (retv)
+		return retv;
+
+	retv = malloc(PATH_MAX);
+	if (!retv)
+		return NULL;
+
+	ret = snprintf(retv, PATH_MAX, SBINDIR "/init.lxc");
+	if (ret < 0 || ret >= PATH_MAX) {
+		ERROR("pathname too long");
+		goto out1;
+	}
+
+	ret = stat(retv, &mystat);
+	if (ret == 0)
+		return retv;
+
+	ret = snprintf(retv, PATH_MAX, LXCINITDIR "/lxc/lxc-init");
+	if (ret < 0 || ret >= PATH_MAX) {
+		ERROR("pathname too long");
+		goto out1;
+	}
+
+	ret = stat(retv, &mystat);
+	if (ret == 0)
+		return retv;
+
+	ret = snprintf(retv, PATH_MAX, "/usr/lib/lxc/lxc-init");
+	if (ret < 0 || ret >= PATH_MAX) {
+		ERROR("pathname too long");
+		goto out1;
+	}
+	ret = stat(retv, &mystat);
+	if (ret == 0)
+		return retv;
+	ret = snprintf(retv, PATH_MAX, "/sbin/lxc-init");
+	if (ret < 0 || ret >= PATH_MAX) {
+		ERROR("pathname too long");
+		goto out1;
+	}
+	ret = stat(retv, &mystat);
+	if (ret == 0)
+		return retv;
+out1:
+	free(retv);
+	return NULL;
+}
+
 static int execute_start(struct lxc_handler *handler, void* data)
 {
 	int j, i = 0;
 	struct execute_args *my_args = data;
 	char **argv;
-	int argc = 0;
+	int argc = 0, argc_add;
+	char *initpath;
 
 	while (my_args->argv[argc++]);
 
-	argv = malloc((argc + my_args->quiet ? 5 : 4) * sizeof(*argv));
-	if (!argv)
-		return 1;
+	argc_add = 4;
+	if (my_args->quiet)
+		argc_add++;
+	if (!handler->conf->rootfs.path) {
+		argc_add += 4;
+		if (lxc_log_has_valid_level())
+			argc_add += 2;
+	}
 
-	argv[i++] = LXCINITDIR "/lxc-init";
+	argv = malloc((argc + argc_add) * sizeof(*argv));
+	if (!argv)
+		goto out1;
+
+	initpath = choose_init();
+	if (!initpath) {
+		ERROR("Failed to find an lxc-init");
+		goto out2;
+	}
+	argv[i++] = initpath;
 	if (my_args->quiet)
 		argv[i++] = "--quiet";
+	if (!handler->conf->rootfs.path) {
+		argv[i++] = "--name";
+		argv[i++] = (char *)handler->name;
+		argv[i++] = "--lxcpath";
+		argv[i++] = (char *)handler->lxcpath;
+
+		if (lxc_log_has_valid_level()) {
+			argv[i++] = "--logpriority";
+			argv[i++] = (char *)
+				lxc_log_priority_to_string(lxc_log_get_level());
+		}
+	}
 	argv[i++] = "--";
 	for (j = 0; j < argc; j++)
 		argv[i++] = my_args->argv[j];
@@ -60,6 +161,10 @@ static int execute_start(struct lxc_handler *handler, void* data)
 
 	execvp(argv[0], argv);
 	SYSERROR("failed to exec %s", argv[0]);
+	free(initpath);
+out2:
+	free(argv);
+out1:
 	return 1;
 }
 
@@ -76,7 +181,7 @@ static struct lxc_operations execute_start_ops = {
 };
 
 int lxc_execute(const char *name, char *const argv[], int quiet,
-		struct lxc_conf *conf)
+		struct lxc_conf *conf, const char *lxcpath)
 {
 	struct execute_args args = {
 		.argv = argv,
@@ -86,5 +191,6 @@ int lxc_execute(const char *name, char *const argv[], int quiet,
 	if (lxc_check_inherited(conf, -1))
 		return -1;
 
-	return __lxc_start(name, conf, &execute_start_ops, &args);
+	conf->is_execute = 1;
+	return __lxc_start(name, conf, &execute_start_ops, &args, lxcpath);
 }

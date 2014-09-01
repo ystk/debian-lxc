@@ -1,12 +1,12 @@
 
-<!-- 
+<!--
 
 lxc: linux Container library
 
 (C) Copyright IBM Corp. 2007, 2008
 
 Authors:
-Daniel Lezcano <dlezcano at fr.ibm.com>
+Daniel Lezcano <daniel.lezcano at free.fr>
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
@@ -20,11 +20,11 @@ Lesser General Public License for more details.
 
 You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 -->
 
-<!DOCTYPE refentry PUBLIC "-//Davenport//DTD DocBook V3.0//EN" [
+<!DOCTYPE refentry PUBLIC @docdtd@ [
 
 <!ENTITY commonoptions SYSTEM "@builddir@/common_options.sgml">
 <!ENTITY seealso SYSTEM "@builddir@/see_also.sgml">
@@ -49,9 +49,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
   <refsynopsisdiv>
     <cmdsynopsis>
-      <command>lxc-wait <replaceable>-n name</replaceable>
-	<replaceable>-s states</replaceable>
-      </command>
+      <command>lxc-wait</command>
+      <arg choice="req">-n <replaceable>name</replaceable></arg>
+      <arg choice="req">-s <replaceable>states</replaceable></arg>
     </cmdsynopsis>
   </refsynopsisdiv>
 
@@ -75,6 +75,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 	  <para>
 	    Specify the container state(s) to wait for. The container
 	    states can be ORed to specify several states.
+	  </para>
+	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term>
+	  <option>-t <replaceable>timeout</replaceable></option>
+	</term>
+	<listitem>
+	  <para>
+	    Wait timeout seconds for desired state to be reached.
 	  </para>
 	</listitem>
       </varlistentry>
@@ -122,7 +133,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 	    the <command>lxc-create</command> command.
           </para>
         </listitem>
-      </varlistentry>    
+      </varlistentry>
 
 
     </variablelist>

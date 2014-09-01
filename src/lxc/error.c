@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,12 +18,13 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
+
 #include "error.h"
 #include "log.h"
 
@@ -50,7 +51,6 @@ extern int  lxc_error_set_and_log(int pid, int status)
 
 	if (WIFSIGNALED(status)) {
 		int signal = WTERMSIG(status);
-		ret = ret + 128 + signal;
 
 		INFO("child <%d> ended on signal (%d)", pid, signal);
 	}

@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  * Michel Normand <normand at fr.ibm.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -19,12 +19,13 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef __arguments_h
-#define __arguments_h
+#ifndef __LXC_ARGUMENTS_H
+#define __LXC_ARGUMENTS_H
 
 #include <getopt.h>
+#include <stdint.h>
 
 struct lxc_arguments;
 
@@ -33,6 +34,7 @@ typedef int (*lxc_arguments_checker_t) (const struct lxc_arguments *);
 
 struct lxc_arguments {
 	const char *help;
+	void(*helpfn)(const struct lxc_arguments *);
 	const char *progname;
 	const struct option* options;
 	lxc_arguments_parser_t parser;
@@ -45,11 +47,15 @@ struct lxc_arguments {
 	int daemonize;
 	const char *rcfile;
 	const char *console;
+	const char *console_log;
+	const char *pidfile;
+	const char **lxcpath;
+	int lxcpath_cnt;
+	/* set to 0 to accept only 1 lxcpath, -1 for unlimited */
+	int lxcpath_additional;
 
-	/* for lxc-checkpoint/restart */
-	const char *statefile;
-	int statefd;
-	int flags;
+	/* for lxc-start */
+	const char *share_ns[32]; // size must be greater than LXC_NS_MAX
 
 	/* for lxc-console */
 	int ttynum;
@@ -57,9 +63,35 @@ struct lxc_arguments {
 
 	/* for lxc-wait */
 	char *states;
+	long timeout;
+
+	/* for lxc-autostart */
+	int shutdown;
+
+	/* for lxc-stop */
+	int hardstop;
+	int nokill;
+	int nolock;
+	int nowait;
+	int reboot;
+
+	/* for lxc-destroy */
+	int force;
 
 	/* close fds from parent? */
 	int close_all_fds;
+
+	/* lxc-create */
+	char *bdevtype, *configfile, *template;
+	char *fstype;
+	uint64_t fssize;
+	char *lvname, *vgname, *thinpool;
+	char *zfsroot, *lowerdir, *dir;
+
+	/* auto-start */
+	int all;
+	int list;
+	char *groups;
 
 	/* remaining arguments */
 	char *const *argv;
@@ -73,13 +105,16 @@ struct lxc_arguments {
 	{"name", required_argument, 0, 'n'}, \
 	{"help", no_argument, 0, 'h'}, \
 	{"usage", no_argument,	0, OPT_USAGE}, \
+	{"version", no_argument,	0, OPT_VERSION}, \
 	{"quiet", no_argument,	0, 'q'}, \
 	{"logfile", required_argument, 0, 'o'}, \
 	{"logpriority", required_argument, 0, 'l'}, \
+	{"lxcpath", required_argument, 0, 'P'}, \
 	{0, 0, 0, 0}
 
 /* option keys for long only options */
 #define	OPT_USAGE 0x1000
+#define	OPT_VERSION OPT_USAGE-1
 
 extern int lxc_arguments_parse(struct lxc_arguments *args,
 			       int argc, char *const argv[]);
