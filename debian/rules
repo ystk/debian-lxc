@@ -29,9 +29,6 @@ override_dh_auto_configure:
 override_dh_auto_install:
 	dh_auto_install -- SYSTEMD_UNIT_DIR=/lib/systemd/system
 
-	# fix systemd service
-	sed -i -e 's|$${prefix}/lib/.*/lxc/|/usr/lib/$(DEB_HOST_MULTIARCH)/lxc/|g' debian/tmp/lib/systemd/system/lxc.service
-
 	# removing unused files
 	rm -rf debian/tmp/usr/include
 	rm -f debian/tmp/usr/lib/*/*.so
@@ -49,6 +46,16 @@ override_dh_builddeb:
 
 override_dh_compress:
 	dh_compress -X.cfg
+
+override_dh_fixperms:
+	dh_fixperms -Xusr/lib/$(DEB_HOST_MULTIARCH)/lxc/lxc-user-nic
+
+override_dh_gencontrol:
+ifneq ($(DEB_VENDOR),Debian)
+	dh_gencontrol -- -Vlua:Suggests="lua-alt-getopt, lua-filesystem"
+else
+	dh_gencontrol
+endif
 
 override_dh_install:
 	dh_install --fail-missing

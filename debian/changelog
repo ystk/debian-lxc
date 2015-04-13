@@ -1,3 +1,62 @@
+lxc (1:1.0.6-6) unstable; urgency=low
+
+  * Use http.debian.net instead of cdn.debian.net (Closes: #774204,
+    #774472).
+
+ -- Daniel Baumann <mail@daniel-baumann.ch>  Mon, 05 Jan 2015 19:24:35 +0100
+
+lxc (1:1.0.6-5) unstable; urgency=low
+
+  * Mounting /sys read-only in lxc-debian to prevent (one way of) escaping
+    containers (Closes: #770901).
+  * Adding patch from lxc 1.0.7 to make lxc-debian work with systemd
+    (Closes: #766216).
+  * Adding patch from lxc 1.0.7 to make lxc-debian handle switch of
+    initsystem better.
+
+ -- Daniel Baumann <mail@daniel-baumann.ch>  Sat, 06 Dec 2014 13:00:36 +0100
+
+lxc (1:1.0.6-4) unstable; urgency=low
+
+  * Marking -t option in lxc-create manpage as required (Closes: #768778).
+
+ -- Daniel Baumann <mail@daniel-baumann.ch>  Tue, 11 Nov 2014 19:57:58 +0100
+
+lxc (1:1.0.6-3) unstable; urgency=low
+
+  * Preserving setuid on lxc-user-nic (Closes: #764815).
+
+ -- Daniel Baumann <mail@daniel-baumann.ch>  Mon, 13 Oct 2014 20:44:15 +0200
+
+lxc (1:1.0.6-2) unstable; urgency=low
+
+  * Correcting automatic lua:Suggests generation.
+  * Adding openssl to recommends since upstreams lxc-debian template
+    uses openssl for mac generation.
+
+ -- Daniel Baumann <mail@daniel-baumann.ch>  Tue, 07 Oct 2014 09:42:36 +0200
+
+lxc (1:1.0.6-1) unstable; urgency=low
+
+  * Merging upstream version 1.0.6.
+  * Refreshing sysvinit-lsb-functions.patch.
+  * Updating to standards version 3.9.6.
+  * Setting options for systemd in debian.common.conf (Closes: #761196,
+    #761197).
+
+ -- Daniel Baumann <mail@daniel-baumann.ch>  Mon, 29 Sep 2014 12:04:40 +0200
+
+lxc (1:1.0.5-3) unstable; urgency=low
+
+  * Dropping fixes for prefix in systemd unit file, not needed anymore.
+  * Moving debootstrap to recommends.
+  * Moving lua to suggests.
+  * Adding lua suggests for non-debian system.
+  * Showing warning when lxc is used on systemd with cgroups mounted in
+    /etc/fstab (Closes: #760357).
+
+ -- Daniel Baumann <mail@daniel-baumann.ch>  Thu, 04 Sep 2014 04:30:47 +0200
+
 lxc (1:1.0.5-2) unstable; urgency=low
 
   * Using and build-depending on dh-systemd (Closes: #758628).

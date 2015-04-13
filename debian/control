@@ -18,7 +18,7 @@ Build-Depends:
  linux-libc-dev,
  pkg-config,
  python3-dev,
-Standards-Version: 3.9.5
+Standards-Version: 3.9.6
 Homepage: http://linuxcontainers.org/
 Vcs-Browser: http://daniel-baumann.ch/gitweb/?p=debian/packages/lxc.git
 Vcs-Git: git://daniel-baumann.ch/git/debian/packages/lxc.git
@@ -31,9 +31,12 @@ Depends:
  ${shlibs:Depends},
  ${python3:Depends},
 Recommends:
- lua5.2,
+ debootstrap,
+ openssl,
  rsync,
-Suggests: debootstrap
+Suggests:
+ lua5.2,
+ ${lua:Suggests},
 Conflicts: lxc-dev
 Replaces: lxc-dev
 Description: Linux Containers userspace tools

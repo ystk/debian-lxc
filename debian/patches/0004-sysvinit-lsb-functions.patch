@@ -22,9 +22,9 @@ diff -Naurp lxc.orig/config/init/sysvinit/lxc.in lxc/config/init/sysvinit/lxc.in
  	# Start containers
  	wait_for_bridge
  	# Start autoboot containers first then the NULL group "onboot,".
--	action $"Starting LXC autoboot containers: " /usr/bin/lxc-autostart $OPTIONS $BOOTGROUPS
+-	action $"Starting LXC autoboot containers: " "$bindir"/lxc-autostart $OPTIONS $BOOTGROUPS
 +	log_daemon_msg "Starting LXC autoboot containers: "
-+	/usr/bin/lxc-autostart $OPTIONS $BOOTGROUPS
++	"$bindir"/lxc-autostart $OPTIONS $BOOTGROUPS
  	touch "$localstatedir"/lock/subsys/lxc
  	;;
    stop)
@@ -38,12 +38,3 @@ diff -Naurp lxc.orig/config/init/sysvinit/lxc.in lxc/config/init/sysvinit/lxc.in
  	rm -f "$localstatedir"/lock/subsys/lxc
  	;;
    restart|reload|force-reload)
-@@ -125,7 +127,7 @@ case "$1" in
- 	$0 start
- 	;;
-   *)
--	echo $"Usage: $0 {start|stop|restart|reload|force-reload}"
-+	echo "Usage: $0 {start|stop|restart|reload|force-reload}"
- 	exit 2
- esac
- exit $?

@@ -21,6 +21,18 @@ case "${1}" in
 		then
 			rm -f /etc/default/lxc
 		fi
+
+		# upgrade from wheezy with cgroups in fstab to jessie with systemd
+		if ps --pid 1 | grep -qs systemd && grep -Eq '^ *cgroup ' /etc/fstab
+		then
+
+cat << EOF
+WARNING: systemd detected and manual cgroup mount in /etc/fstab
+
+Systemd mounts the cgroup fs automatically, please remove it from /etc/fstab.
+EOF
+
+		fi
 		;;
 
 	abort-upgrade)
