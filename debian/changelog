@@ -1,3 +1,16 @@
+lxc (1:1.0.6-6+deb8u1) jessie-security; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+  * Add 0018-CVE-2015-1331-lxclock-use-run-lxc-lock-rather-than-r.patch.
+    CVE-2015-1331: Directory traversal flaw that allows arbitrary file
+    creation as the root user. (Closes: #793298)
+  * Add 0019-CVE-2015-1334-Don-t-use-the-container-s-proc-during-.patch.
+    CVE-2015-1334: Processes intended to be run inside of confined LXC
+    containers could escape their AppArmor or SELinux confinement.
+    (Closes: #793298)
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Wed, 22 Jul 2015 18:12:27 +0200
+
 lxc (1:1.0.6-6) unstable; urgency=low
 
   * Use http.debian.net instead of cdn.debian.net (Closes: #774204,
