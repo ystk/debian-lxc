@@ -1,3 +1,15 @@
+lxc (1:1.0.6-6+deb8u2) jessie-security; urgency=high
+
+  * CVE-2015-1335: prevent local containment administrator from escaping
+    container via symlink attack. (Closes: #800471). Also include 2 followup
+    patches that fixed regressions in the original fix. Patches obtained from
+    the Ubuntu package:
+    - 0020-CVE-2015-1335.patch
+    - 0021-CVE-2015-1335-2.patch
+    - 0022-CVE-2015-1335-3.patch
+
+ -- Antonio Terceiro <terceiro@debian.org>  Fri, 13 Nov 2015 09:53:32 -0200
+
 lxc (1:1.0.6-6+deb8u1) jessie-security; urgency=high
 
   * Non-maintainer upload by the Security Team.

@@ -17,3 +17,6 @@
 0017-lxc-debian-mirror.patch
 0018-CVE-2015-1331-lxclock-use-run-lxc-lock-rather-than-r.patch
 0019-CVE-2015-1334-Don-t-use-the-container-s-proc-during-.patch
+0020-CVE-2015-1335.patch
+0021-CVE-2015-1335-2.patch
+0022-CVE-2015-1335-3.patch
