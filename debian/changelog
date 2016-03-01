@@ -1,3 +1,14 @@
+lxc (0.7.2-1+deb6u1) squeeze-lts; urgency=medium
+
+  * Non-maintainer upload by the Debian LTS team.
+  * debian/patches:
+    + Add CVE-2015-1335.patch. Backport safe_mount support. Protect container
+      mounts against symlinks. Resoled CVE-2015-1335. (Closes: #800471).
+    + Add CVE-2013-6441.patch. Use read-only permissions when mounting
+      /sbin/init. Resolved CVE-2013-6441.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Fri, 04 Dec 2015 16:17:06 +0100
+
 lxc (0.7.2-1) unstable; urgency=low
 
   * New upstream version
