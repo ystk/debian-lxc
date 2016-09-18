@@ -1,7 +1,15 @@
+lxc (1:1.0.6-6+deb8u3) jessie; urgency=medium
+
+  * 0023-lxc-debian-make-sure-init-is-installed.patch: make sure stretch/sid
+    containers have an init system, after init 1.34 dropped the `Essential:
+    yes` header.
+
+ -- Antonio Terceiro <terceiro@debian.org>  Mon, 20 Jun 2016 16:58:05 -0300
+
 lxc (1:1.0.6-6+deb8u2) jessie-security; urgency=high
 
-  * CVE-2015-1335: prevent local containment administrator from escaping
-    container via symlink attack. (Closes: #800471). Also include 2 followup
+  * CVE-2015-1335: prevent local container administrator from escaping
+    containment via a symlink attack. (Closes: #800471). Also include 2 followup
     patches that fixed regressions in the original fix. Patches obtained from
     the Ubuntu package:
     - 0020-CVE-2015-1335.patch
