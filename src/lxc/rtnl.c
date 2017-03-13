@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,7 +18,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 #include <string.h>
 #include <stdio.h>
@@ -28,8 +28,9 @@
 #include <unistd.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
-#include <nl.h>
-#include <rtnl.h>
+
+#include "nl.h"
+#include "rtnl.h"
 
 extern int rtnetlink_open(struct rtnl_handler *handler)
 {
@@ -52,7 +53,7 @@ extern int rtnetlink_send(struct rtnl_handler *handler, struct rtnlmsg *rtnlmsg)
 	return netlink_send(&handler->nlh, (struct nlmsg *)&rtnlmsg->nlmsghdr);
 }
 
-extern int rtnetlink_transaction(struct rtnl_handler *handler, 
+extern int rtnetlink_transaction(struct rtnl_handler *handler,
 			  struct rtnlmsg *request, struct rtnlmsg *answer)
 {
 	return netlink_transaction(&handler->nlh, (struct nlmsg *)&request->nlmsghdr,

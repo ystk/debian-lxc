@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,10 +18,10 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef __genl_h
-#define __genl_h
+#ifndef __LXC_GENL_H
+#define __LXC_GENL_H
 
 /*
  * Use this as a good size to allocate generic netlink messages
@@ -30,7 +30,7 @@
 #define GENLMSG_DATA(glh) ((void *)(NLMSG_DATA(glh) + GENL_HDRLEN))
 
 /*
- * struct genl_handler : the structure which store the netlink handler 
+ * struct genl_handler : the structure which store the netlink handler
  *  and the family number resulting of the auto-generating id family
  *  for the generic netlink protocol
  *
@@ -59,7 +59,7 @@ struct genlmsg {
 
 static inline int genetlink_len(const struct genlmsg *genlmsg)
 {
-        return ((genlmsg->nlmsghdr.nlmsg_len) - GENL_HDRLEN - NLMSG_HDRLEN);
+	return ((genlmsg->nlmsghdr.nlmsg_len) - GENL_HDRLEN - NLMSG_HDRLEN);
 }
 
 /*
@@ -116,6 +116,6 @@ void genlmsg_free(struct genlmsg *genlmsg);
  *
  * Returns 0 on success, < 0 otherwise
  */
-int genetlink_transaction(struct genl_handler *handler, 
+int genetlink_transaction(struct genl_handler *handler,
 			  struct genlmsg *request, struct genlmsg *answer);
 #endif

@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,7 +18,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <sys/types.h>
@@ -27,6 +27,7 @@
 #include <errno.h>
 #include <fcntl.h>
 
+#include "sync.h"
 #include "log.h"
 #include "start.h"
 
@@ -35,7 +36,7 @@ lxc_log_define(lxc_sync, lxc);
 static int __sync_wait(int fd, int sequence)
 {
 	int sync = -1;
-	int ret;
+	ssize_t ret;
 
 	ret = read(fd, &sync, sizeof(sync));
 	if (ret < 0) {
@@ -45,6 +46,17 @@ static int __sync_wait(int fd, int sequence)
 
 	if (!ret)
 		return 0;
+
+	if ((size_t)ret != sizeof(sync)) {
+		ERROR("unexpected sync size: %zu expected %zu", (size_t)ret, sizeof(sync));
+		return -1;
+	}
+
+	if (sync == LXC_SYNC_ERROR) {
+		ERROR("An error occurred in another process "
+		      "(expected sequence number %d)", sequence);
+		return -1;
+	}
 
 	if (sync != sequence) {
 		ERROR("invalid sequence number %d. expected %d",
@@ -87,6 +99,11 @@ int lxc_sync_wake_parent(struct lxc_handler *handler, int sequence)
 	return __sync_wake(handler->sv[0], sequence);
 }
 
+int lxc_sync_wait_parent(struct lxc_handler *handler, int sequence)
+{
+	return __sync_wait(handler->sv[0], sequence);
+}
+
 int lxc_sync_wait_child(struct lxc_handler *handler, int sequence)
 {
 	return __sync_wait(handler->sv[1], sequence);
@@ -99,7 +116,10 @@ int lxc_sync_wake_child(struct lxc_handler *handler, int sequence)
 
 int lxc_sync_init(struct lxc_handler *handler)
 {
-	if (socketpair(AF_LOCAL, SOCK_STREAM, 0, handler->sv)) {
+	int ret;
+
+	ret = socketpair(AF_LOCAL, SOCK_STREAM, 0, handler->sv);
+	if (ret) {
 		SYSERROR("failed to create synchronization socketpair");
 		return -1;
 	}

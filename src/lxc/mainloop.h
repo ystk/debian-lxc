@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,23 +18,27 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <list.h>
+#ifndef __LXC_MAINLOOP_H
+#define __LXC_MAINLOOP_H
+
+#include <stdint.h>
+#include "list.h"
 
 struct lxc_epoll_descr {
 	int epfd;
 	struct lxc_list handlers;
 };
 
-typedef int (*lxc_mainloop_callback_t)(int fd, void *data, 
+typedef int (*lxc_mainloop_callback_t)(int fd, uint32_t event, void *data,
 				       struct lxc_epoll_descr *descr);
 
-extern int lxc_mainloop(struct lxc_epoll_descr *descr);
+extern int lxc_mainloop(struct lxc_epoll_descr *descr, int timeout_ms);
 
 extern int lxc_mainloop_add_handler(struct lxc_epoll_descr *descr, int fd,
-				    lxc_mainloop_callback_t callback, 
+				    lxc_mainloop_callback_t callback,
 				    void *data);
 
 extern int lxc_mainloop_del_handler(struct lxc_epoll_descr *descr, int fd);
@@ -42,3 +46,5 @@ extern int lxc_mainloop_del_handler(struct lxc_epoll_descr *descr, int fd);
 extern int lxc_mainloop_open(struct lxc_epoll_descr *descr);
 
 extern int lxc_mainloop_close(struct lxc_epoll_descr *descr);
+
+#endif

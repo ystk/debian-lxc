@@ -1,11 +1,11 @@
-<!-- 
+<!--
 
 lxc: linux Container library
 
 (C) Copyright IBM Corp. 2007, 2008
 
 Authors:
-Daniel Lezcano <dlezcano at fr.ibm.com>
+Daniel Lezcano <daniel.lezcano at free.fr>
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
@@ -19,11 +19,11 @@ Lesser General Public License for more details.
 
 You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 -->
 
-<!DOCTYPE refentry PUBLIC "-//Davenport//DTD DocBook V3.0//EN" [
+<!DOCTYPE refentry PUBLIC @docdtd@ [
 
 <!ENTITY commonoptions SYSTEM "@builddir@/common_options.sgml">
 <!ENTITY seealso SYSTEM "@builddir@/see_also.sgml">
@@ -48,9 +48,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
   <refsynopsisdiv>
     <cmdsynopsis>
-      <command>lxc-console <replaceable>-n name</replaceable>
-	<optional>-t ttynum</optional>
-      </command>
+      <command>lxc-console</command>
+      <arg choice="req">-n <replaceable>name</replaceable></arg>
+      <arg choice="opt">-e <replaceable>escape character</replaceable></arg>
+      <arg choice="opt">-t <replaceable>ttynum</replaceable></arg>
     </cmdsynopsis>
   </refsynopsisdiv>
 
@@ -66,14 +67,25 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
     <para>
       The available tty are free slots taken by this command. That
       means if the container has four ttys available and the command
-      has been launched four times taking the different tty, the fifth
-      command will fail because no console will be available. 
+      has been launched four times each taking a different tty, the
+      fifth command will fail because no console will be available.
     </para>
 
     <para>
       The command will connect to a tty. If the connection is lost or
       broken, the command can be launched again and regain the tty at
       the state it was before the disconnection.
+    </para>
+
+    <para>
+      A <replaceable>ttynum</replaceable> of 0 may be given to attach
+      to the container's /dev/console instead of its
+      dev/tty&lt;<replaceable>ttynum</replaceable>&gt;.
+    </para>
+
+    <para>
+      A keyboard escape sequence may be used to disconnect from the tty
+      and quit lxc-console. The default escape sequence is &lt;Ctrl+a q&gt;.
     </para>
 
   </refsect1>
@@ -84,12 +96,26 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
       <varlistentry>
 	<term>
-	  <option>-t <optional>ttynum</optional></option>
+	  <option>-e, --escape <replaceable>escape character</replaceable></option>
 	</term>
 	<listitem>
 	  <para>
-	    Specify the tty number to connect, if not specified a tty
-	    number will be automatically choosen by the container.
+	    Specify the escape sequence prefix to use instead of
+            &lt;Ctrl a&gt;.
+            This may be given as '^letter' or just 'letter'. For example
+            to use &lt;Ctrl+b q&gt; as the escape sequence use -e '^b'.
+	  </para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>
+	  <option>-t, --tty <replaceable>ttynum</replaceable></option>
+	</term>
+	<listitem>
+	  <para>
+	    Specify the tty number to connect to or 0 for the console. If not
+	    specified the next available tty number will be automatically
+	    chosen by the container.
 	  </para>
 	</listitem>
       </varlistentry>
@@ -114,7 +140,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 	    user "foo" and "bar" is trying to open a console to it.
           </para>
         </listitem>
-      </varlistentry>    
+      </varlistentry>
 
     </variablelist>
 

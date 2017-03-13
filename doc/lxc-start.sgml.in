@@ -1,11 +1,11 @@
-<!-- 
+<!--
 
 lxc: linux Container library
 
 (C) Copyright IBM Corp. 2007, 2008
 
 Authors:
-Daniel Lezcano <dlezcano at fr.ibm.com>
+Daniel Lezcano <daniel.lezcano at free.fr>
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
@@ -19,11 +19,11 @@ Lesser General Public License for more details.
 
 You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 -->
 
-<!DOCTYPE refentry PUBLIC "-//Davenport//DTD DocBook V3.0//EN" [
+<!DOCTYPE refentry PUBLIC @docdtd@ [
 
 <!ENTITY commonoptions SYSTEM "@builddir@/common_options.sgml">
 <!ENTITY seealso SYSTEM "@builddir@/see_also.sgml">
@@ -47,10 +47,20 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
   </refnamediv>
 
   <refsynopsisdiv>
-    <cmdsynopsis><command>lxc-start <replaceable>-n
-    name</replaceable> <optional>-f
-    config_file</optional> <optional>-s KEY=VAL</optional>
-    <optional>command</optional></command></cmdsynopsis>
+    <cmdsynopsis>
+      <command>lxc-start</command>
+      <arg choice="req">-n <replaceable>name</replaceable></arg>
+      <arg choice="opt">-f <replaceable>config_file</replaceable></arg>
+      <arg choice="opt">-c <replaceable>console_device</replaceable></arg>
+      <arg choice="opt">-L <replaceable>console_logfile</replaceable></arg>
+      <arg choice="opt">-d</arg>
+      <arg choice="opt">-F</arg>
+      <arg choice="opt">-p <replaceable>pid_file</replaceable></arg>
+      <arg choice="opt">-s KEY=VAL</arg>
+      <arg choice="opt">-C</arg>
+      <arg choice="opt">--share-[net|ipc|uts] <replaceable>name|pid</replaceable></arg>
+      <arg choice="opt">command</arg>
+    </cmdsynopsis>
   </refsynopsisdiv>
 
   <refsect1>
@@ -69,13 +79,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
       defined, the default isolation is used.
     </para>
     <para>
-      The orphan process group
-      and daemon are not supported by this command, use
-      the <command>lxc-execute</command> command instead.
-    </para>
-    <para>
       If no command is specified, <command>lxc-start</command> will
-      use the default
+      use the command defined in lxc.init_cmd or if not set, the default
       <command>"/sbin/init"</command> command to run a system
       container.
     </para>
@@ -96,7 +101,31 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 	  <para>
 	    Run the container as a daemon. As the container has no
 	    more tty, if an error occurs nothing will be displayed,
-	    the log file can be used to check the error.
+	    the log file can be used to check the error. (This is the default mode)
+	  </para>
+	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term>
+	  <option>-F, --foreground</option>
+	</term>
+	<listitem>
+	  <para>
+	    Run the container in the foreground. In this mode, the container
+	    console will be attached to the current tty and signals will be routed
+	    directly to the container.
+	  </para>
+	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term>
+	  <option>-p, --pidfile <replaceable>pid_file</replaceable></option>
+	</term>
+	<listitem>
+	  <para>
+	    Create a file with the process id.
 	  </para>
 	</listitem>
       </varlistentry>
@@ -120,6 +149,32 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
       <varlistentry>
 	<term>
+	  <option>-c,
+	  --console <replaceable>console_device</replaceable></option>
+	</term>
+	<listitem>
+	  <para>
+	    Specify a device to use for the container's console, for example
+            /dev/tty8. If this option is not specified the current terminal
+            will be used unless <option>-d</option> is specified.
+	  </para>
+	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term>
+	  <option>-L,
+	  --console-log <replaceable>console_logfile</replaceable></option>
+	</term>
+	<listitem>
+	  <para>
+	    Specify a file to log the container's console output to.
+	  </para>
+	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term>
 	  <option>-s, --define <replaceable>KEY=VAL</replaceable></option>
 	</term>
 	<listitem>
@@ -127,6 +182,65 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 	    Assign value <replaceable>VAL</replaceable> to configuration
 	    variable <replaceable>KEY</replaceable>. This overrides any
 	    assignment done in <replaceable>config_file</replaceable>.
+	  </para>
+	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term>
+	  <option>-C,
+	  --close-all-fds</option>
+	</term>
+	<listitem>
+	  <para>
+	  If any file descriptors are inherited, close them.  If this option
+	  is not specified, then <command>lxc-start</command> will exit with
+	  failure instead. Note: <replaceable>--daemon</replaceable> implies
+	  <replaceable>--close-all-fds</replaceable>.
+	  </para>
+	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term>
+	  <option>--share-net <replaceable>name|pid</replaceable></option>
+	</term>
+	<listitem>
+	  <para>
+            Inherit a network namespace from
+	    a <replaceable>name</replaceable> container or
+	    a <replaceable>pid</replaceable>. The network namespace
+	    will continue to be managed by the original owner. The
+	    network configuration of the starting container is ignored
+	    and the up/down scripts won't be executed.
+	  </para>
+	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term>
+	  <option>--share-ipc <replaceable>name|pid</replaceable></option>
+	</term>
+	<listitem>
+	  <para>
+            Inherit an IPC namespace from
+	    a <replaceable>name</replaceable> container or
+	    a <replaceable>pid</replaceable>.
+	  </para>
+	</listitem>
+      </varlistentry>
+
+      <varlistentry>
+	<term>
+	  <option>--share-uts <replaceable>name|pid</replaceable></option>
+	</term>
+	<listitem>
+	  <para>
+            Inherit a UTS namespace from
+	    a <replaceable>name</replaceable> container or
+	    a <replaceable>pid</replaceable>. The starting LXC will
+	    not set the hostname, but the container OS may do it
+	    anyway.
 	  </para>
 	</listitem>
       </varlistentry>
@@ -151,7 +265,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 	    container or create a new one.
           </para>
         </listitem>
-      </varlistentry>    
+      </varlistentry>
 
     </variablelist>
 

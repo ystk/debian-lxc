@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2009
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,14 +18,13 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <unistd.h>
 #include <alloca.h>
 #include <errno.h>
 #include <signal.h>
-#include <syscall.h>
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -34,36 +33,12 @@
 #include "namespace.h"
 #include "log.h"
 
-#ifndef __NR_setns
-#  if __i386__
-#    define __NR_setns 338
-#  elif __x86_64__
-#    define __NR_setns 300
-#  elif __powerpc__
-#    define __NR_setns 323
-#  elif __s390__
-#    define __NR_setns 332
-#  else
-#    warning "architecture not supported for setns"
-#  endif
-#endif
-
 lxc_log_define(lxc_namespace, lxc);
 
 struct clone_arg {
 	int (*fn)(void *);
 	void *arg;
 };
-
-int setns(int nstype, int fd)
-{
-#ifndef __NR_setns
-	errno = ENOSYS;
-	return -1;
-#else
-	return syscall(__NR_setns, nstype, fd);
-#endif
-}
 
 static int do_clone(void *arg)
 {
@@ -78,47 +53,79 @@ pid_t lxc_clone(int (*fn)(void *), void *arg, int flags)
 		.arg = arg,
 	};
 
-	long stack_size = sysconf(_SC_PAGESIZE);
- 	void *stack = alloca(stack_size) + stack_size;
+	size_t stack_size = sysconf(_SC_PAGESIZE);
+	void *stack = alloca(stack_size);
 	pid_t ret;
 
 #ifdef __ia64__
 	ret = __clone2(do_clone, stack,
 		       stack_size, flags | SIGCHLD, &clone_arg);
 #else
-	ret = clone(do_clone, stack, flags | SIGCHLD, &clone_arg);
+	ret = clone(do_clone, stack  + stack_size, flags | SIGCHLD, &clone_arg);
 #endif
 	if (ret < 0)
-		ERROR("failed to clone(0x%x): %s", flags, strerror(errno));
+		ERROR("Failed to clone (%#x): %s.", flags, strerror(errno));
 
 	return ret;
 }
 
-int lxc_attach(pid_t pid)
+/* Leave the user namespace at the first position in the array of structs so
+ * that we always attach to it first when iterating over the struct and using
+ * setns() to switch namespaces. This especially affects lxc_attach(): Suppose
+ * you cloned a new user namespace and mount namespace as an unprivileged user
+ * on the host and want to setns() to the mount namespace. This requires you to
+ * attach to the user namespace first otherwise the kernel will fail this check:
+ *
+ *        if (!ns_capable(mnt_ns->user_ns, CAP_SYS_ADMIN) ||
+ *            !ns_capable(current_user_ns(), CAP_SYS_CHROOT) ||
+ *            !ns_capable(current_user_ns(), CAP_SYS_ADMIN))
+ *            return -EPERM;
+ *
+ *    in
+ *
+ *        linux/fs/namespace.c:mntns_install().
+ */
+const struct ns_info ns_info[LXC_NS_MAX] = {
+	[LXC_NS_USER] = {"user", CLONE_NEWUSER, "CLONE_NEWUSER"},
+	[LXC_NS_MNT] = {"mnt", CLONE_NEWNS, "CLONE_NEWNS"},
+	[LXC_NS_PID] = {"pid", CLONE_NEWPID, "CLONE_NEWPID"},
+	[LXC_NS_UTS] = {"uts", CLONE_NEWUTS, "CLONE_NEWUTS"},
+	[LXC_NS_IPC] = {"ipc", CLONE_NEWIPC, "CLONE_NEWIPC"},
+	[LXC_NS_NET] = {"net", CLONE_NEWNET, "CLONE_NEWNET"},
+	[LXC_NS_CGROUP] = {"cgroup", CLONE_NEWCGROUP, "CLONE_NEWCGROUP"}
+};
+
+int lxc_namespace_2_cloneflag(char *namespace)
 {
-	char path[MAXPATHLEN];
-	char *ns[] = { "pid", "mnt", "net", "ipc", "uts" };
-	const int size = sizeof(ns) / sizeof(char *);
-	int fd[size];
 	int i;
+	for (i = 0; i < LXC_NS_MAX; i++)
+		if (!strcasecmp(ns_info[i].proc_name, namespace))
+			return ns_info[i].clone_flag;
 
-	for (i = 0; i < size; i++) {
-		sprintf(path, "/proc/%d/ns/%s", pid, ns[i]);
-		fd[i] = open(path, O_RDONLY);
-		if (fd[i] < 0) {
-			SYSERROR("failed to open '%s'", path);
-			return -1;
-		}
+	ERROR("Invalid namespace name: %s.", namespace);
+	return -1;
+}
+
+int lxc_fill_namespace_flags(char *flaglist, int *flags)
+{
+	char *token, *saveptr = NULL;
+	int aflag;
+
+	if (!flaglist) {
+		ERROR("At least one namespace is needed.");
+		return -1;
 	}
 
-	for (i = 0; i < size; i++) {
-		if (setns(0, fd[i])) {
-			SYSERROR("failed to set namespace '%s'", ns[i]);
+	token = strtok_r(flaglist, "|", &saveptr);
+	while (token) {
+
+		aflag = lxc_namespace_2_cloneflag(token);
+		if (aflag < 0)
 			return -1;
-		}
 
-		close(fd[i]);
+		*flags |= aflag;
+
+		token = strtok_r(NULL, "|", &saveptr);
 	}
-
 	return 0;
 }

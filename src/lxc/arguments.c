@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  * Michel Normand <normand at fr.ibm.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,13 +32,15 @@
 #include <unistd.h>
 
 #include "arguments.h"
+#include "utils.h"
+#include "version.h"
 
 /*---------------------------------------------------------------------------*/
 static int build_shortopts(const struct option *a_options,
 			   char *a_shortopts, size_t a_size)
 {
 	const struct option *opt;
-	int i = 0;
+	size_t i = 0;
 
 	if (!a_options || !a_shortopts || !a_size)
 		return -1;
@@ -96,6 +98,9 @@ static void print_usage(const struct option longopts[],
 		int j;
 		char *uppername = strdup(opt->name);
 
+		if (!uppername)
+			exit(-ENOMEM);
+
 		for (j = 0; uppername[j]; j++)
 			uppername[j] = toupper(uppername[j]);
 
@@ -124,6 +129,11 @@ static void print_usage(const struct option longopts[],
 	exit(0);
 }
 
+static void print_version() {
+	printf("%s\n", LXC_VERSION);
+	exit(0);
+}
+
 static void print_help(const struct lxc_arguments *args, int code)
 {
 	fprintf(stderr, "\
@@ -133,8 +143,10 @@ Common options :\n\
   -o, --logfile=FILE               Output log to FILE instead of stderr\n\
   -l, --logpriority=LEVEL          Set log priority to LEVEL\n\
   -q, --quiet                      Don't produce any output\n\
+  -P, --lxcpath=PATH               Use specified container path\n\
   -?, --help                       Give this help list\n\
       --usage                      Give a short usage message\n\
+      --version                    Print the version number\n\
 \n\
 Mandatory or optional arguments to long options are also mandatory or optional\n\
 for any corresponding short options.\n\
@@ -142,7 +154,29 @@ for any corresponding short options.\n\
 See the %s man page for further information.\n\n",
 	args->progname, args->help, args->progname);
 
+	if (args->helpfn)
+		args->helpfn(args);
 	exit(code);
+}
+
+static int lxc_arguments_lxcpath_add(struct lxc_arguments *args,
+				     const char *lxcpath)
+{
+	if (args->lxcpath_additional != -1 &&
+	    args->lxcpath_cnt > args->lxcpath_additional) {
+		fprintf(stderr, "This command only accepts %d -P,--lxcpath arguments\n",
+			args->lxcpath_additional + 1);
+		exit(EXIT_FAILURE);
+	}
+
+	args->lxcpath = realloc(args->lxcpath, (args->lxcpath_cnt + 1) *
+				 sizeof(args->lxcpath[0]));
+	if (args->lxcpath == NULL) {
+		lxc_error(args, "no memory");
+		return -ENOMEM;
+	}
+	args->lxcpath[args->lxcpath_cnt++] = lxcpath;
+	return 0;
 }
 
 extern int lxc_arguments_parse(struct lxc_arguments *args,
@@ -169,7 +203,15 @@ extern int lxc_arguments_parse(struct lxc_arguments *args,
 		case 'o':	args->log_file = optarg; break;
 		case 'l':	args->log_priority = optarg; break;
 		case 'q':	args->quiet = 1; break;
+		case OPT_RCFILE: args->rcfile = optarg; break;
+		case 'P':
+			remove_trailing_slashes(optarg);
+			ret = lxc_arguments_lxcpath_add(args, optarg);
+			if (ret < 0)
+				return ret;
+			break;
 		case OPT_USAGE: print_usage(args->options, args);
+		case OPT_VERSION: print_version();
 		case '?':	print_help(args, 1);
 		case 'h': 	print_help(args, 0);
 		default:
@@ -187,9 +229,16 @@ extern int lxc_arguments_parse(struct lxc_arguments *args,
 	args->argv = &argv[optind];
 	args->argc = argc - optind;
 
+	/* If no lxcpaths were given, use default */
+	if (!args->lxcpath_cnt) {
+		ret = lxc_arguments_lxcpath_add(args, lxc_global_config_value("lxc.lxcpath"));
+		if (ret < 0)
+			return ret;
+	}
+
 	/* Check the command options */
 
-	if (!args->name) {
+	if (!args->name && strcmp(args->progname, "lxc-autostart") != 0) {
 		lxc_error(args, "missing container name, use --name option");
 		return -1;
 	}
@@ -200,35 +249,6 @@ error:
 	if (ret)
 		lxc_error(args, "could not parse command line");
 	return ret;
-}
-
-extern char **lxc_arguments_dup(const char *file, struct lxc_arguments *args)
-{
-	char **argv;
-	int opt, nbargs = args->argc + 2;
-
-	if (args->quiet)
-		nbargs += 1;
-
-	argv = malloc((nbargs + 1) * sizeof(*argv));
-	if (!argv)
-		return NULL;
-
-	nbargs = 0;
-
-	argv[nbargs++] = strdup(file);
-
-	if (args->quiet)
-		argv[nbargs++] = "--quiet";
-
-	argv[nbargs++] = "--";
-
-	for (opt = 0; opt < args->argc; opt++)
-		argv[nbargs++] = strdup(args->argv[opt]);
-
-	argv[nbargs] = NULL;
-
-	return argv;
 }
 
 int lxc_arguments_str_to_int(struct lxc_arguments *args, const char *str)

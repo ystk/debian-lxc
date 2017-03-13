@@ -5,7 +5,7 @@ lxc: linux Container library
 (C) Copyright IBM Corp. 2007, 2008
 
 Authors:
-Daniel Lezcano <dlezcano at fr.ibm.com>
+Daniel Lezcano <daniel.lezcano at free.fr>
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
@@ -19,7 +19,7 @@ Lesser General Public License for more details.
 
 You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 -->
 
@@ -53,6 +53,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
       <listitem>
 	<para>
 	  mute on
+	</para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-P, --lxcpath=<replaceable>PATH</replaceable></option></term>
+      <listitem>
+	<para>
+	  Use an alternate container path.  The default is @LXCPATH@.
 	</para>
       </listitem>
     </varlistentry>
@@ -94,6 +103,30 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 	  Use container identifier <replaceable>NAME</replaceable>.
 	  The container identifier format is an alphanumeric string.
 	</para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>--rcfile=<replaceable>FILE</replaceable></option></term>
+      <listitem>
+	<para>
+	  Specify the configuration file to configure the virtualization
+	  and isolation functionalities for the container.
+	</para>
+	<para>
+	 This configuration file if present will be used even if there is
+	 already a configuration file present in the previously created
+	 container (via lxc-create).
+	</para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>--version</option></term>
+      <listitem>
+        <para>
+          Show the version number.
+        </para>
       </listitem>
     </varlistentry>
   </variablelist>

@@ -1,13 +1,12 @@
-
-	Contributing to this project
-        ----------------------------
-
+Contributing to this project
+----------------------------
 
 This project accepts contributions. In order to contribute, you should
 pay attention to a few things:
 
     1 - your code must follow the coding style rules
-    2 - the format of the submission must be email patches
+    2 - the format of the submission must be email patches or github
+    pull requests
     3 - your work must be signed
 
 
@@ -26,19 +25,43 @@ http://lxr.linux.no/linux+v2.6.27/Documentation/CodingStyle
 Submitting Modifications:
 -------------------------
 
-The contributions should be email patches. The guidelines are the same
-as the patch submission for the Linux kernel except for the DCO which
-is defined below. The guidelines are defined in the
+The contributions should be email patches or github pull requests.
+The guidelines are the same as the patch submission for the Linux kernel
+except for the DCO which is defined below. The guidelines are defined in the
 'SubmittingPatches' file, available in the directory 'Documentation'
 of the Linux kernel source tree.
 
 It can be accessed online too:
 
-http://lxr.linux.no/linux+v2.6.27/Documentation/SubmittingPatches
+https://www.kernel.org/doc/Documentation/SubmittingPatches
 
-You can submit your patches to the lxc-devel@lists.sourceforge.net mailing
-list. Use https://lists.sourceforge.net/lists/listinfo/lxc-devel to subscribe
+You can submit your patches to the lxc-devel@lists.linuxcontainers.org mailing
+list. Use http://lists.linuxcontainers.org/listinfo/lxc-devel to subscribe
 to the list.
+
+
+Licensing for new files:
+------------------------
+
+LXC is made of files shipped under a few different licenses.
+
+Anything that ends up being part of the LXC library needs to be released
+under LGPLv2.1+ or a license compatible with it (though the latter will
+only be accepted for cases where the code originated elsewhere and was
+imported into LXC).
+
+Language bindings for the libraries need to be released under LGPLv2.1+.
+
+Anything else (non-libaries) needs to be Free Software and needs to be
+allowed to link with LGPLv2.1+ code (if needed). LXC upstream prefers
+LGPLv2.1+ or GPLv2 for those.
+
+
+When introducing a new file into the project, please make sure it has a
+copyright header making clear under which license it's being released
+and if it doesn't match the criteria described above, please explain
+your decision on the lxc-devel mailing-list when submitting your patch.
+
 
 Developer Certificate of Origin:
 --------------------------------
@@ -81,7 +104,10 @@ By making a contribution to this project, I certify that:
 
 then you just add a line saying
 
-	Signed-off-by: Random J Developer <random@developer.org>
+    Signed-off-by: Random J Developer <random@developer.org>
 
-using your real name (sorry, no pseudonyms or anonymous
-contributions.)
+You can do it by using option -s or --signoff when you commit
+
+    git commit --signoff ...
+
+using your real name (sorry, no pseudonyms or anonymous contributions.)

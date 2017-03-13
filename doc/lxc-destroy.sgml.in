@@ -1,11 +1,11 @@
-<!-- 
+<!--
 
 lxc: linux Container library
 
 (C) Copyright IBM Corp. 2007, 2008
 
 Authors:
-Daniel Lezcano <dlezcano at fr.ibm.com>
+Daniel Lezcano <daniel.lezcano at free.fr>
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
@@ -19,11 +19,11 @@ Lesser General Public License for more details.
 
 You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 -->
 
-<!DOCTYPE refentry PUBLIC "-//Davenport//DTD DocBook V3.0//EN" [
+<!DOCTYPE refentry PUBLIC @docdtd@ [
 
 <!ENTITY commonoptions SYSTEM "@builddir@/common_options.sgml">
 <!ENTITY seealso SYSTEM "@builddir@/see_also.sgml">
@@ -48,8 +48,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
   <refsynopsisdiv>
     <cmdsynopsis>
-      <command>lxc-destroy <replaceable>-n
-      name</replaceable></command>
+      <command>lxc-destroy</command>
+      <arg choice="req">-n <replaceable>name</replaceable></arg>
+      <arg choice="opt">-f</arg>
+      <arg choice="opt">-s</arg>
     </cmdsynopsis>
   </refsynopsisdiv>
 
@@ -64,6 +66,37 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
   </refsect1>
 
   <refsect1>
+
+    <title>Options</title>
+
+    <variablelist>
+      <varlistentry>
+	<term>
+	  <option>-f, --force</option>
+	</term>
+	<listitem>
+	  <para>
+	    If a container is running, stop it first.  If this option is
+	    not specified and the container is running, then
+	    <command>lxc-destroy</command> will be aborted.
+	  </para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><option>-s, --snapshots</option></term>
+        <listitem>
+          <para>
+            destroy the specified container including all its snapshots.
+          </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+
+  </refsect1>
+
+  &commonoptions;
+
+  <refsect1>
     <title>Diagnostic</title>
 
     <variablelist>
@@ -74,11 +107,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
           <para>
 	    The specified container for destruction was not found. It
 	    is probable it does not exists and was already
-	    destroyed.You can use the <command>lxc-ls -l</command>
+	    destroyed.You can use the <command>lxc-ls</command>
 	    command to list the available containers on the system.
           </para>
         </listitem>
-      </varlistentry>    
+      </varlistentry>
 
     </variablelist>
 

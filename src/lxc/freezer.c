@@ -4,7 +4,7 @@
  * (C) Copyright IBM Corp. 2007, 2008
  *
  * Authors:
- * Daniel Lezcano <dlezcano at fr.ibm.com>
+ * Daniel Lezcano <daniel.lezcano at free.fr>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,11 +18,11 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#define _GNU_SOURCE
+#include "config.h"
+
 #include <stdio.h>
-#undef _GNU_SOURCE
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
@@ -32,94 +32,56 @@
 #include <sys/param.h>
 
 #include "error.h"
-
-#include <lxc/log.h>
-#include <lxc/cgroup.h>
+#include "state.h"
+#include "monitor.h"
+#include "log.h"
+#include "lxc.h"
 
 lxc_log_define(lxc_freezer, lxc);
 
-static int freeze_unfreeze(const char *name, int freeze)
+lxc_state_t freezer_state(const char *name, const char *lxcpath)
 {
-	char *nsgroup;
-	char freezer[MAXPATHLEN], *f;
-	char tmpf[32];
-	int fd, ret;
-	
-	ret = lxc_cgroup_path_get(&nsgroup, name);
-	if (ret)
+	char v[100];
+	if (lxc_cgroup_get("freezer.state", v, 100, name, lxcpath) < 0)
 		return -1;
 
-	snprintf(freezer, MAXPATHLEN, "%s/freezer.state", nsgroup);
+	if (v[strlen(v)-1] == '\n')
+		v[strlen(v)-1] = '\0';
+	return lxc_str2state(v);
+}
 
-	fd = open(freezer, O_RDWR);
-	if (fd < 0) {
-		SYSERROR("failed to open freezer for '%s'", name);
+static int do_freeze_thaw(int freeze, const char *name, const char *lxcpath)
+{
+	char v[100];
+	const char *state = freeze ? "FROZEN" : "THAWED";
+
+	if (lxc_cgroup_set("freezer.state", state, name, lxcpath) < 0) {
+		ERROR("Failed to freeze %s:%s", lxcpath, name);
 		return -1;
 	}
-
-	if (freeze) {
-		f = "FROZEN";
-		ret = write(fd, f, strlen(f) + 1);
-	} else {
-		f = "THAWED";
-		ret = write(fd, f, strlen(f) + 1);
-
-		/* compatibility code with old freezer interface */
-		if (ret < 0) {
-			f = "RUNNING";
-			ret = write(fd, f, strlen(f) + 1) < 0;
-		}
-	}
-
-	if (ret < 0) {
-		SYSERROR("failed to write '%s' to '%s'", f, freezer);
-		goto out;
-	}
-
 	while (1) {
-		ret = lseek(fd, 0L, SEEK_SET);
-		if (ret < 0) {
-			SYSERROR("failed to lseek on file '%s'", freezer);
-			goto out;
+		if (lxc_cgroup_get("freezer.state", v, 100, name, lxcpath) < 0) {
+			ERROR("Failed to get new freezer state for %s:%s", lxcpath, name);
+			return -1;
 		}
-
-		ret = read(fd, tmpf, sizeof(tmpf));
-		if (ret < 0) {
-			SYSERROR("failed to read to '%s'", freezer);
-			goto out;
+		if (v[strlen(v)-1] == '\n')
+			v[strlen(v)-1] = '\0';
+		if (strncmp(v, state, strlen(state)) == 0) {
+			if (name)
+				lxc_monitor_send_state(name, freeze ? FROZEN : THAWED, lxcpath);
+			return 0;
 		}
-
-		ret = strncmp(f, tmpf, strlen(f));
-		if (!ret)
-			break;		/* Success */
-
 		sleep(1);
-
-		ret = lseek(fd, 0L, SEEK_SET);
-		if (ret < 0) {
-			SYSERROR("failed to lseek on file '%s'", freezer);
-			goto out;
-		}
-
-		ret = write(fd, f, strlen(f) + 1);
-		if (ret < 0) {
-			SYSERROR("failed to write '%s' to '%s'", f, freezer);
-			goto out;
-		}
 	}
-
-out:
-	close(fd);
-	return ret;
 }
 
-int lxc_freeze(const char *name)
+int lxc_freeze(const char *name, const char *lxcpath)
 {
-	return freeze_unfreeze(name, 1);
+	lxc_monitor_send_state(name, FREEZING, lxcpath);
+	return do_freeze_thaw(1, name, lxcpath);
 }
 
-int lxc_unfreeze(const char *name)
+int lxc_unfreeze(const char *name, const char *lxcpath)
 {
-	return freeze_unfreeze(name, 0);
+	return do_freeze_thaw(0, name, lxcpath);
 }
-
