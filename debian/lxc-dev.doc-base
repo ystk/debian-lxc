@@ -1,0 +1,7 @@
+Document: lxc
+Title: LXC Documentation
+Section: System/Administration
+
+Format: HTML
+Index: /usr/share/doc/lxc/html/index.html
+Files: /usr/share/doc/lxc/html/*.html

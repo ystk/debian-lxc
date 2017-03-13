@@ -1,0 +1,141 @@
+Source: lxc
+Section: admin
+Priority: optional
+Maintainer: pkg-lxc <pkg-lxc-devel@lists.alioth.debian.org>
+Uploaders: Antonio Terceiro <terceiro@debian.org>, Evgeni Golov <evgeni@debian.org>
+Build-Depends: autotools-dev,
+               debhelper (>= 9.20160114),
+               dh-apparmor,
+               dh-autoreconf,
+               dh-python,
+               dh-systemd,
+               docbook2x,
+               doxygen,
+               graphviz,
+               libapparmor-dev,
+               libcap-dev,
+               libgnutls28-dev,
+               liblua5.2-dev,
+               libseccomp-dev [!alpha !hppa !m68k !sh4 !sparc64],
+               libselinux-dev,
+               linux-libc-dev,
+               pkg-config,
+               python3-dev
+Standards-Version: 3.9.8
+Homepage: https://linuxcontainers.org/
+Vcs-Git: https://anonscm.debian.org/git/pkg-lxc/lxc.git
+Vcs-Browser: https://anonscm.debian.org/cgit/pkg-lxc/lxc.git
+
+Package: lxc
+Architecture: linux-any
+Pre-Depends: ${misc:Pre-Depends}
+Depends: liblxc1 (= ${binary:Version}),
+         python3-lxc (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+         ${python3:Depends},
+         lsb-base (>= 3.0-6)
+Recommends: bridge-utils,
+            debootstrap,
+            dirmngr,
+            dnsmasq-base,
+            gnupg,
+            iptables,
+            libpam-cgfs,
+            lxcfs,
+            openssl,
+            rsync,
+            uidmap
+Suggests: apparmor, btrfs-tools, lvm2
+Description: Linux Containers userspace tools
+ Containers are insulated areas inside a system, which have their own namespace
+ for filesystem, network, PID, IPC, CPU and memory allocation and which can be
+ created using the Control Group and Namespace features included in the Linux
+ kernel.
+ .
+ This package provides the lxc-* tools, which can be used to start a single
+ daemon in a container, or to boot an entire "containerized" system, and to
+ manage and debug your containers.
+
+Package: lxc-dev
+Section: libdevel
+Architecture: linux-any
+Depends: liblxc1 (= ${binary:Version}),
+         lxc (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends}
+Breaks: lxc (<< 1:1.0.7-7~)
+Description: Linux Containers userspace tools (development)
+ Containers are insulated areas inside a system, which have their own namespace
+ for filesystem, network, PID, IPC, CPU and memory allocation and which can be
+ created using the Control Group and Namespace features included in the Linux
+ kernel.
+ .
+ This package contains the development files.
+
+Package: lxc-tests
+Architecture: linux-any
+Depends: liblxc1 (= ${binary:Version}),
+         lxc (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends}
+Replaces: lxc-dev (<< 1:2.0.5-2~)
+Breaks: lxc-dev (<< 1:2.0.5-2~)
+Description: Linux Containers userspace tools (test binaries)
+ Containers are insulated areas inside a system, which have their own namespace
+ for filesystem, network, PID, IPC, CPU and memory allocation and which can be
+ created using the Control Group and Namespace features included in the Linux
+ kernel.
+ .
+ This package contains the test binaries. Those binaries are primarily
+ used for autopkgtest and by some developers. They are not meant to be
+ installed on regular user systems.
+
+Package: liblxc1
+Section: libs
+Architecture: linux-any
+Depends: ${misc:Depends}, ${shlibs:Depends}, cgroupfs-mount | systemd
+Breaks: lxc (<< 1:1.0.7-7~)
+Description: Linux Containers userspace tools (library)
+ Containers are insulated areas inside a system, which have their own namespace
+ for filesystem, network, PID, IPC, CPU and memory allocation and which can be
+ created using the Control Group and Namespace features included in the Linux
+ kernel.
+ .
+ This package contains the shared library.
+
+Package: python3-lxc
+Architecture: linux-any
+Section: python
+Depends: liblxc1 (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+         ${shlibs:Depends}
+Replaces: lxc (<< 1:2.0.5-2~)
+Breaks: lxc (<< 1:2.0.5-2~)
+Description: Linux Containers userspace tools (Python 3.x bindings)
+ Containers are insulated areas inside a system, which have their own namespace
+ for filesystem, network, PID, IPC, CPU and memory allocation and which can be
+ created using the Control Group and Namespace features included in the Linux
+ kernel.
+ .
+ This package contains the Python 3.x bindings.
+
+Package: lua-lxc
+Architecture: linux-any
+Section: interpreters
+Depends: liblua5.2-0,
+         liblxc1 (= ${binary:Version}),
+         lua-filesystem,
+         lua5.2,
+         ${misc:Depends},
+         ${shlibs:Depends}
+Replaces: lxc (<< 1:2.0.5-2~)
+Breaks: lxc (<< 1:2.0.5-2~)
+Description: Linux Containers userspace tools (Lua bindings)
+ Containers are insulated areas inside a system, which have their own namespace
+ for filesystem, network, PID, IPC, CPU and memory allocation and which can be
+ created using the Control Group and Namespace features included in the Linux
+ kernel.
+ .
+ This package contains the Lua bindings.

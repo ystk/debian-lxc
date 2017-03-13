@@ -1,0 +1,21 @@
+lxc (1:1.1.5-1) unstable; urgency=medium
+
+  LXC before 1.1 did silently ignore lxc.aa_profile if the kernel did
+  not have the AppArmor mount feature (by checking for the existence of
+  /sys/kernel/security/apparmor/features/mount/mask).
+
+  As of LXC 1.1 it will error out with the following message in the log:
+  Incomplete AppArmor support in your kernel
+  If you really want to start this container, set
+  lxc.aa_allow_incomplete = 1 in your container configuration file
+
+  Debian does not ship with AppArmor enabled in the kernel by default,
+  so this should not affect default installs. However if you have enabled
+  AppArmor, your containers will fail to start after the upgrade.
+
+  Please add "lxc.aa_allow_incomplete = 1" to your configuration to
+  start AppArmor-secured containers until we have full support in the
+  kernel.
+
+ -- Evgeni Golov <evgeni@debian.org>  Sun, 31 Jan 2016 18:22:40 -0200
+

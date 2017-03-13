@@ -1,0 +1,2 @@
+# bugs.debian.org/204975 (debhelper)
+lua-lxc: package-has-unnecessary-activation-of-ldconfig-trigger

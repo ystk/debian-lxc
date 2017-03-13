@@ -1,0 +1,4 @@
+# bugs.debian.org/204975 (debhelper)
+lxc: postinst-has-useless-call-to-ldconfig
+# false positive (lxc-user-nic)
+lxc: setuid-binary

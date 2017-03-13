@@ -1,0 +1,148 @@
+#!/bin/sh
+# Environment
+
+if [ ! -d /sys/fs/cgroup/memory ]; then
+  if [ ! "$AUTOPKGTEST_REBOOT_MARK" = "lxc-prepare" ]; then
+    sed -i '/GRUB_CMDLINE_LINUX_DEFAULT/ s/GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 cgroup_enable=memory swapaccount=1"/' /etc/default/grub
+    update-grub2
+    /tmp/autopkgtest-reboot lxc-prepare
+  fi
+fi
+
+set -eu
+
+unset TMPDIR
+
+TEST_PASS=0
+TEST_FAIL=0
+TEST_IGNORED=0
+
+IGNORE_LIST=""
+
+# Helper functions
+pass() {
+    TEST_PASS=$((${TEST_PASS}+1))
+    echo "PASS: $1"
+}
+
+fail() {
+    for entry in $IGNORE_LIST; do
+        if [ "$entry" = "$2" ]; then
+            ignore $1
+            return
+        fi
+    done
+
+    TEST_FAIL=$((${TEST_FAIL}+1))
+    echo "FAIL: $1"
+
+    if [ -f "$3" ]; then
+        echo "---"
+        cat $3
+        echo "---"
+    fi
+}
+
+ignore() {
+    TEST_IGNORED=$((${TEST_IGNORED}+1))
+    echo "IGNORED: $*"
+}
+
+summary() {
+    echo ""
+    echo "SUMMARY: pass=$TEST_PASS, fail=$TEST_FAIL, ignored=$TEST_IGNORED"
+}
+
+# prepare network features, they are disabled by default on Debian
+# but we want to test them
+echo USE_LXC_BRIDGE=true > /etc/default/lxc-net
+service lxc-net restart
+
+cat <<EOF >/etc/lxc/default.conf
+lxc.network.type = veth
+lxc.network.link = lxcbr0
+lxc.network.flags = up
+lxc.network.hwaddr = 00:16:3e:xx:xx:xx
+EOF
+
+modprobe overlay || true
+
+# since gnupg2 and dirmngr fetching keys after bootup fails in the first seconds
+# most probably this is due to entropy in the VM, so lets just wait
+sleep 30
+
+# The actual tests
+## Default testsuite
+for testbin in /usr/bin/lxc-test-*; do
+    STRING="lxc-tests: $testbin"
+    [ ! -x "$testbin" ] && continue
+
+    # Some tests can't be run standalone
+    [ "$testbin" = "/usr/bin/lxc-test-may-control" ] && continue
+
+    # Skip some tests when running in a container
+    if [ -f /run/container_type ] || (type systemd-detect-virt >/dev/null 2>&1 && systemd-detect-virt  --container >/dev/null 2>&1); then
+        [ "$testbin" = "/usr/bin/lxc-test-apparmor" ] && \
+            ignore "$STRING" && continue
+
+        [ "$testbin" = "/usr/bin/lxc-test-device-add-remove" ] && \
+            ignore "$STRING" && continue
+
+        [ "$testbin" = "/usr/bin/lxc-test-reboot" ] && \
+            ignore "$STRING" && continue
+    fi
+
+    # Skip userns tests in unprivileged containers
+    if [ -f /proc/self/uid_map ] && \
+            ! grep -q "4294967295$" /proc/self/uid_map; then
+
+        [ "$testbin" = "/usr/bin/lxc-test-unpriv" ] && \
+            ignore "$STRING" && continue
+
+        [ "$testbin" = "/usr/bin/lxc-test-usernic" ] && \
+            ignore "$STRING" && continue
+    fi
+
+    # Skip some tests on old kernels
+    if [ ! -f /proc/self/uid_map ] || [ ! -f /etc/subuid ] || \
+       [ ! -f /etc/subgid ]; then
+        [ "$testbin" = "/usr/bin/lxc-test-unpriv" ] && \
+            ignore "$STRING" && continue
+
+        [ "$testbin" = "/usr/bin/lxc-test-usernic" ] && \
+            ignore "$STRING" && continue
+    fi
+
+    # Skip some tests on Debian
+    if [ "$(lsb_release --id --short)" = "Debian" ]; then
+        [ "$testbin" = "/usr/bin/lxc-test-apparmor" ] && \
+            ignore "$STRING" && continue
+    fi
+
+    OUT=$(mktemp)
+    $testbin >$OUT 2>&1 && pass "$STRING" || fail "$STRING" "$testbin" "$OUT"
+    rm $OUT
+done
+
+## Python3 testsuite
+STRING="python3: API"
+if [ ! -f /usr/share/doc/python3-lxc/examples/api_test.py.gz ]; then
+    ignore "$STRING"
+else
+    OUT=$(mktemp)
+
+    PYTEST=$(mktemp)
+    cat /usr/share/doc/python3-lxc/examples/api_test.py.gz | gzip -d > $PYTEST
+    python3 $PYTEST >$OUT 2>&1 && pass "$STRING" || \
+        fail "$STRING" "python3" "$OUT"
+    rm $PYTEST
+
+    rm $OUT
+fi
+
+# Test summary
+summary
+
+[ "$TEST_FAIL" != "0" ] && exit 1
+
+exit 0

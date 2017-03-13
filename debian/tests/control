@@ -1,0 +1,14 @@
+Tests: exercise
+Depends: busybox-static,
+         debootstrap,
+         uidmap,
+         xz-utils,
+         lsb-release,
+         file,
+         dnsmasq-base,
+         rsync,
+         gnupg,
+         dirmngr,
+         iptables,
+         @
+Restrictions: needs-root allow-stderr isolation-machine

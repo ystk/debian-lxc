@@ -1,0 +1,15 @@
+LXC for Debian
+--------------
+
+Most templates ship without a root password, so you cannot login with
+ lxc-console -n <container>
+You can, however, get a shell (without a tty) by running
+ lxc-attach -n <container>
+
+If you really need a root password set, you can do so by calling
+ lxc-attach -n <container> passwd
+or you could allow a password-less login by calling
+ lxc-attach -n <container> sed -i '/root/ s/:\*:/::/' /etc/shadow
+After either of these you will be again able to login via lxc-console.
+
+ -- Evgeni Golov <evgeni@debian.org>  Sat, 16 Jul 2016 11:49:16 +0200

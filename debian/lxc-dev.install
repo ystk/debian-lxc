@@ -1,0 +1,4 @@
+doc/api/html/*	/usr/share/doc/lxc/html
+usr/include
+usr/lib/*/*.so
+usr/lib/*/pkgconfig
