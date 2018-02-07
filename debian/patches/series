@@ -21,3 +21,7 @@
 0021-CVE-2015-1335-2.patch
 0022-CVE-2015-1335-3.patch
 0023-lxc-debian-make-sure-init-is-installed.patch
+0024-lxc-alpine-fix-verification-of-apk.static-binary.patch
+0025-Remounts-bind-mounts-if-read-only-flag-is-provided.patch
+0026-CVE-2016-8649_do-not-send-procfd-to-attached-process.patch
+0027-CVE-2017-5985-Ensure-target-netns-is-caller-owned.patch

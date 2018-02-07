@@ -1,0 +1,32 @@
+From e00f9e4e7ab5a76cfd4068e09579f9f471666a90 Mon Sep 17 00:00:00 2001
+From: Natanael Copa <ncopa@alpinelinux.org>
+Date: Mon, 3 Aug 2015 13:40:25 +0200
+Subject: [PATCH] lxc-alpine: fix verification of apk.static binary
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We need specify which hashing algorithm was used to create the signature
+we check.
+
+Fixes #609
+
+Signed-off-by: Natanael Copa <ncopa@alpinelinux.org>
+Acked-by: Stéphane Graber <stgraber@ubuntu.com>
+---
+ templates/lxc-alpine.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/templates/lxc-alpine.in b/templates/lxc-alpine.in
+index 963c42a..6dcc51b 100644
+--- a/templates/lxc-alpine.in
++++ b/templates/lxc-alpine.in
+@@ -83,7 +83,7 @@ get_static_apk () {
+ 
+     # verify the static apk binary signature
+     APK=$rootfs/sbin/apk.static
+-    openssl dgst -verify $rootfs/etc/apk/keys/$keyname \
++    openssl dgst -sha1 -verify $rootfs/etc/apk/keys/$keyname \
+         -signature "$APK.SIGN.RSA.$keyname" "$APK" || return 1
+ 
+     if [ "$auto_repo_dir" ]; then

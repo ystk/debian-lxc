@@ -1,0 +1,43 @@
+From 3fb22c29dcb647826aacd227efa506b17f50fcac Mon Sep 17 00:00:00 2001
+From: Abin Shahab <ashahab@altiscale.com>
+Date: Wed, 12 Nov 2014 00:06:52 +0000
+Subject: [PATCH] Remounts bind mounts if read-only flag is provided
+
+Bind mounts do not honor filesystem mount options. This change will
+remount filesystems that are bind mounted if there are changes to
+filesystem mount options, specifically if the mount is readonly.
+
+Signed-off-by: Abin Shahab <ashahab@altiscale.com>
+Acked-by: Serge E. Hallyn <serge.hallyn@ubuntu.com>
+---
+ src/lxc/conf.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/src/lxc/conf.c b/src/lxc/conf.c
+index 2a4d5c5..cb30d56 100644
+--- a/src/lxc/conf.c
++++ b/src/lxc/conf.c
+@@ -2054,10 +2054,12 @@ static int mount_entry(const char *fsname, const char *target,
+ 	if ((mountflags & MS_REMOUNT) || (mountflags & MS_BIND)) {
+ 		DEBUG("remounting %s on %s to respect bind or remount options",
+ 		      fsname ? fsname : "(none)", target ? target : "(none)");
+-
++		unsigned long rqd_flags = 0;
++		if (mountflags & MS_RDONLY)
++			rqd_flags |= MS_RDONLY;
+ #ifdef HAVE_STATVFS
+ 		if (statvfs(fsname, &sb) == 0) {
+-			unsigned long required_flags = 0;
++			unsigned long required_flags = rqd_flags;
+ 			if (sb.f_flag & MS_NOSUID)
+ 				required_flags |= MS_NOSUID;
+ 			if (sb.f_flag & MS_NODEV)
+@@ -2073,7 +2075,7 @@ static int mount_entry(const char *fsname, const char *target,
+ 			 * mountflags, then skip the remount
+ 			 */
+ 			if (!(mountflags & MS_REMOUNT)) {
+-				if (!(required_flags & ~mountflags)) {
++				if (!(required_flags & ~mountflags) && rqd_flags == 0) {
+ 					DEBUG("mountflags already was %lu, skipping remount",
+ 						mountflags);
+ 					goto skipremount;

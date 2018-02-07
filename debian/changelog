@@ -1,3 +1,26 @@
+lxc (1:1.0.6-6+deb8u6) jessie; urgency=medium
+
+  * CVE-2017-5985: Ensure target netns is caller-owned (Closes: #857295)
+
+ -- Evgeni Golov <evgeni@debian.org>  Sat, 11 Mar 2017 10:42:30 +0100
+
+lxc (1:1.0.6-6+deb8u5) jessie; urgency=medium
+
+  * attach: do not send procfd to attached process
+    Closes: #845465
+    CVE-2016-8649
+
+ -- Evgeni Golov <evgeni@debian.org>  Thu, 24 Nov 2016 08:14:36 +0100
+
+lxc (1:1.0.6-6+deb8u4) jessie; urgency=medium
+
+  * fix Alpine Linux container creation
+    (Closes: #838517)
+  * remount bind mounts if read-only flag is provided
+    (Closes: #838957)
+
+ -- Evgeni Golov <evgeni@debian.org>  Sat, 12 Nov 2016 21:14:50 +0100
+
 lxc (1:1.0.6-6+deb8u3) jessie; urgency=medium
 
   * 0023-lxc-debian-make-sure-init-is-installed.patch: make sure stretch/sid
