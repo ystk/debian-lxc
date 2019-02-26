@@ -5,6 +5,7 @@ usr/lib/*/lxc/lxc-*
 usr/lib/*/lxc/rootfs
 usr/lib/*/lxc/hooks
 usr/sbin
+usr/share/bash-completion
 usr/share/doc
 usr/share/lxc
 usr/share/man

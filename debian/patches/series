@@ -1,1 +1,2 @@
 0010-lxc-debian-root-password.patch
+lxc-2.0-CVE-2017-5985-Ensure-target-netns-is-caller-owned.patch

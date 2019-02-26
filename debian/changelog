@@ -1,3 +1,17 @@
+lxc (1:2.0.7-2~bpo8+1) jessie-backports; urgency=medium
+
+  * Rebuild for jessie-backports.
+
+ -- Evgeni Golov <evgeni@debian.org>  Wed, 15 Mar 2017 21:18:53 +0100
+
+lxc (1:2.0.7-2) unstable; urgency=high
+
+  * use bash-completion's pkg-config support and don't move files around
+  * ignore lxc-test-cloneconfig if kernel has no overlay support
+  * CVE-2017-5985: Ensure target netns is caller-owned (Closes: #857295)
+
+ -- Evgeni Golov <evgeni@debian.org>  Sat, 11 Mar 2017 09:47:20 +0100
+
 lxc (1:2.0.7-1~bpo8+1) jessie-backports; urgency=medium
 
   * Rebuild for jessie-backports.

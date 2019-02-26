@@ -119,6 +119,12 @@ for testbin in /usr/bin/lxc-test-*; do
             ignore "$STRING" && continue
     fi
 
+    # Skip overlay tests when kernel has no overlay support
+    if ! grep -q overlay /proc/filesystems; then
+        [ "$testbin" = "/usr/bin/lxc-test-cloneconfig" ] && \
+            ignore "$STRING" && continue
+    fi
+
     OUT=$(mktemp)
     $testbin >$OUT 2>&1 && pass "$STRING" || fail "$STRING" "$testbin" "$OUT"
     rm $OUT

@@ -4,6 +4,7 @@ Priority: optional
 Maintainer: pkg-lxc <pkg-lxc-devel@lists.alioth.debian.org>
 Uploaders: Antonio Terceiro <terceiro@debian.org>, Evgeni Golov <evgeni@debian.org>
 Build-Depends: autotools-dev,
+               bash-completion,
                debhelper (>= 9.20160114),
                dh-apparmor,
                dh-autoreconf,

@@ -35,9 +35,7 @@ override_dh_auto_install:
 	find debian/tmp/ -type f -name \*.la -delete
 
 	# lxc
-	mkdir -p debian/lxc/usr/share/bash-completion
-	mv debian/tmp/etc/bash_completion.d debian/lxc/usr/share/bash-completion/completions
-	grep complete debian/lxc/usr/share/bash-completion/completions/lxc | sed "s/.* //g" | while read cmd; do \
+	grep complete debian/tmp/usr/share/bash-completion/completions/lxc | sed "s/.* //g" | while read cmd; do \
 		dh_link -p lxc usr/share/bash-completion/completions/lxc usr/share/bash-completion/completions/$${cmd}; \
 	done
 
